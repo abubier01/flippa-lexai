@@ -321,7 +321,7 @@ export default function DemoContractView({ contract, analysis, initialMessages }
                 </div>
                 <p className="font-medium text-foreground">Ask anything about this contract</p>
                 <p className="text-sm text-muted-foreground max-w-xs">
-                  Try asking: "What are the biggest risks?" or "Can you suggest redline language?"
+                  Try asking: &quot;What are the biggest risks?&quot; or &quot;Can you suggest redline language?&quot;
                 </p>
               </div>
             )}

@@ -33,6 +33,17 @@ const CATEGORY_COLORS: Record<string, string> = {
 }
 
 function renderContent(content: string) {
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+
+  const formatBold = (value: string) =>
+    escapeHtml(value).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+
   // Simple markdown-to-JSX: headings, bold, bullets, paragraphs
   const lines = content.split('\n')
   const elements: React.ReactNode[] = []
@@ -49,13 +60,13 @@ function renderContent(content: string) {
     } else if (trimmed.startsWith('- ')) {
       elements.push(
         <li key={key++} className="text-foreground leading-relaxed ml-4 list-disc" dangerouslySetInnerHTML={{
-          __html: trimmed.slice(2).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          __html: formatBold(trimmed.slice(2))
         }} />
       )
     } else {
       elements.push(
         <p key={key++} className="text-foreground/80 leading-relaxed text-base" dangerouslySetInnerHTML={{
-          __html: trimmed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          __html: formatBold(trimmed)
         }} />
       )
     }

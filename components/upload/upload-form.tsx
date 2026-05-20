@@ -23,7 +23,7 @@ export default function UploadForm() {
   const [activeTab, setActiveTab] = useState('file')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const handleFile = (f: File) => {
+  const handleFile = useCallback((f: File) => {
     const allowed = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
     if (!allowed.includes(f.type) && !f.name.endsWith('.txt') && !f.name.endsWith('.pdf') && !f.name.endsWith('.docx')) {
       toast.error('Only PDF, DOCX, and TXT files are supported')
@@ -35,14 +35,14 @@ export default function UploadForm() {
     }
     setFile(f)
     if (!title) setTitle(f.name.replace(/\.[^.]+$/, ''))
-  }
+  }, [title])
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
     const f = e.dataTransfer.files[0]
     if (f) handleFile(f)
-  }, [title])
+  }, [handleFile])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

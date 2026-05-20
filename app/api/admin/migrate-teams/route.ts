@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server'
+import { requireAdminAccess } from '@/lib/security/admin-guard'
 
-// Project ref extracted from the Supabase URL
-// e.g. https://rqhcrkcilzpjegxseozk.supabase.co -> rqhcrkcilzpjegxseozk
-const PROJECT_REF = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  .replace('https://', '')
-  .replace('.supabase.co', '')
+function getManagementUrl() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+  if (!supabaseUrl) return null
 
-const MANAGEMENT_URL = `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`
+  const projectRef = supabaseUrl
+    .replace('https://', '')
+    .replace('.supabase.co', '')
 
-async function runSQL(sql: string) {
-  const res = await fetch(MANAGEMENT_URL, {
+  return `https://api.supabase.com/v1/projects/${projectRef}/database/query`
+}
+
+async function runSQL(sql: string, managementUrl: string) {
+  const res = await fetch(managementUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -135,10 +139,18 @@ const MIGRATIONS = [
   { label: 'Add team_id to profiles', sql: `ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS team_id UUID REFERENCES public.teams(id) ON DELETE SET NULL` },
 ]
 
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = await requireAdminAccess(request)
+  if (denied) return denied
+
+  const managementUrl = getManagementUrl()
+  if (!managementUrl) {
+    return NextResponse.json({ error: 'NEXT_PUBLIC_SUPABASE_URL is not configured' }, { status: 500 })
+  }
+
   const results = []
   for (const { label, sql } of MIGRATIONS) {
-    const { ok, text } = await runSQL(sql)
+    const { ok, text } = await runSQL(sql, managementUrl)
     results.push({ label, status: ok ? 'ok' : 'error', ...(ok ? {} : { error: text }) })
   }
   const allOk = results.every(r => r.status === 'ok')

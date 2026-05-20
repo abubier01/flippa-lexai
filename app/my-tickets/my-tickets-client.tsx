@@ -4,12 +4,11 @@ import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { formatDistanceToNow, format } from 'date-fns'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import {
   TicketIcon, MessageSquare, Clock, CheckCircle2,
-  RefreshCw, Plus, ArrowRight, Search, Mail,
-  ChevronLeft, Send, Loader2, XCircle,
+  RefreshCw, Plus, ArrowRight, Mail,
+  ChevronLeft, Send, Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -95,79 +94,12 @@ function ChatBubble({ reply, ticketName }: { reply: Reply; ticketName: string })
   )
 }
 
-// ---------- Email search form ----------
-function EmailSearchForm({ onFound }: { onFound: (email: string, tickets: Ticket[]) => void }) {
-  const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    if (!email.trim()) return
-    setLoading(true)
-    const res = await fetch('/api/tickets/lookup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim() }),
-    })
-    const data = await res.json()
-    setLoading(false)
-    if (!res.ok) { setError(data.error); return }
-    onFound(email.trim().toLowerCase(), data.tickets)
-  }
-
-  return (
-    <div className="min-h-[60vh] flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        {/* Icon */}
-        <div className="w-14 h-14 rounded-2xl bg-accent flex items-center justify-center mx-auto mb-6">
-          <Search className="w-7 h-7 text-primary" />
-        </div>
-        <h1 className="text-2xl font-bold text-foreground text-center mb-2">Find your tickets</h1>
-        <p className="text-sm text-muted-foreground text-center mb-8">
-          Enter the email address you used when submitting a support ticket.
-        </p>
-        <form onSubmit={handleSearch} className="space-y-3">
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="pl-9"
-              required
-              autoFocus
-            />
-          </div>
-          {error && (
-            <p className="text-xs text-destructive flex items-center gap-1.5">
-              <XCircle className="w-3.5 h-3.5" />{error}
-            </p>
-          )}
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}
-            Search tickets
-          </Button>
-        </form>
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          Don&apos;t have a ticket?{' '}
-          <Link href="/contact" className="text-primary hover:underline">Submit one here</Link>
-        </p>
-      </div>
-    </div>
-  )
-}
-
 // ---------- Ticket chat view ----------
 function TicketChatView({
   ticket,
-  lookupEmail,
   onBack,
 }: {
   ticket: Ticket
-  lookupEmail: string | null
   onBack: () => void
 }) {
   const [replies, setReplies] = useState<Reply[]>([])
@@ -184,9 +116,7 @@ function TicketChatView({
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const headers: Record<string, string> = {}
-      if (lookupEmail) headers['x-lookup-email'] = lookupEmail
-      const res = await fetch(`/api/tickets/${ticket.id}`, { headers })
+      const res = await fetch(`/api/tickets/${ticket.id}`)
       if (res.ok) {
         const data = await res.json()
         const allReplies: Reply[] = data.ticket.ticket_replies ?? []
@@ -203,7 +133,7 @@ function TicketChatView({
       setLoading(false)
     }
     load()
-  }, [ticket.id, ticket.message, ticket.name, ticket.created_at, lookupEmail])
+  }, [ticket.id, ticket.message, ticket.name, ticket.created_at])
 
   // Scroll to bottom when replies load / new reply added
   useEffect(() => {
@@ -214,12 +144,10 @@ function TicketChatView({
     const msg = replyText.trim()
     if (!msg || sending) return
     setSending(true)
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (lookupEmail) headers['x-lookup-email'] = lookupEmail
     const res = await fetch(`/api/tickets/${ticket.id}`, {
       method: 'POST',
-      headers,
-      body: JSON.stringify({ message: msg, guestName: ticket.name }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg }),
     })
     const data = await res.json()
     setSending(false)
@@ -395,43 +323,18 @@ function TicketList({
 // ---------- Root component ----------
 interface Props {
   initialTickets: object[]
-  userId: string | null
   userEmail: string | null
-  userName: string | null
 }
 
-export default function MyTicketsClient({ initialTickets, userId, userEmail, userName }: Props) {
-  const [tickets, setTickets] = useState<Ticket[]>(initialTickets as Ticket[])
-  const [lookupEmail, setLookupEmail] = useState<string | null>(userEmail ?? null)
+export default function MyTicketsClient({ initialTickets, userEmail }: Props) {
+  const [tickets] = useState<Ticket[]>(initialTickets as Ticket[])
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null)
-  const [searchMode, setSearchMode] = useState(!userId && !userEmail)
+  const lookupEmail = userEmail
 
   // Stats
   const openCount = tickets.filter(t => t.status === 'open').length
   const inProgressCount = tickets.filter(t => t.status === 'in_progress').length
   const resolvedCount = tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length
-
-  function handleFound(email: string, found: Ticket[]) {
-    setLookupEmail(email)
-    setTickets(found)
-    setSearchMode(false)
-  }
-
-  function handleReset() {
-    setLookupEmail(null)
-    setTickets([])
-    setActiveTicket(null)
-    setSearchMode(true)
-  }
-
-  // Guest: show email search
-  if (searchMode) {
-    return (
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <EmailSearchForm onFound={handleFound} />
-      </div>
-    )
-  }
 
   // Ticket chat view
   if (activeTicket) {
@@ -440,7 +343,6 @@ export default function MyTicketsClient({ initialTickets, userId, userEmail, use
         <div className="flex-1 min-h-0 bg-card sm:rounded-2xl sm:border sm:border-border overflow-hidden flex flex-col">
           <TicketChatView
             ticket={activeTicket}
-            lookupEmail={lookupEmail}
             onBack={() => setActiveTicket(null)}
           />
         </div>
@@ -460,11 +362,6 @@ export default function MyTicketsClient({ initialTickets, userId, userEmail, use
               <span className="inline-flex items-center gap-1.5">
                 <Mail className="w-3.5 h-3.5" />
                 {lookupEmail}
-                {!userId && (
-                  <button onClick={handleReset} className="text-primary hover:underline ml-2 text-xs">
-                    Change email
-                  </button>
-                )}
               </span>
             )}
           </p>

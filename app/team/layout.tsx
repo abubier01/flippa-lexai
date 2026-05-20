@@ -18,7 +18,7 @@ export default async function TeamLayout({ children }: { children: React.ReactNo
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar user={user} profile={profile} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Header user={user} />
+        <Header user={user} profile={profile} />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {children}
         </main>

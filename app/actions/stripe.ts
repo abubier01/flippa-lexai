@@ -1,12 +1,13 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 import { getProductById } from '@/lib/products'
 
 export async function startCheckoutSession(
   productId: string,
 ): Promise<{ clientSecret: string; sessionId: string }> {
+  const stripe = getStripe()
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('You must be logged in to upgrade.')

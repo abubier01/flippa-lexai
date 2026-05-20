@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireAdminAccess } from '@/lib/security/admin-guard'
 
 // This route creates the team tables using individual Supabase operations
 // since we cannot run raw DDL through the JS client directly.
 // It uses the management API to run SQL.
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = await requireAdminAccess(request)
+  if (denied) return denied
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
