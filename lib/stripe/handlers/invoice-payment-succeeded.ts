@@ -20,11 +20,14 @@ export async function handleInvoicePaymentSucceeded(
   if (!invoice.period_end) return { userId: null }
 
   const supabase = service()
-  const { data: sub } = await supabase
+  const { data: sub, error: subLookupError } = await supabase
     .from('subscriptions')
     .select('user_id')
     .eq('id', subId)
     .single()
+  if (subLookupError) {
+    throw new Error(`subscription ${subId} lookup failed: ${subLookupError.message}`)
+  }
 
   const { error } = await supabase
     .from('subscriptions')
