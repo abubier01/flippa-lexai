@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
 
 CREATE INDEX IF NOT EXISTS subscriptions_user_id_idx ON public.subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS subscriptions_status_idx ON public.subscriptions(status);
+CREATE INDEX IF NOT EXISTS subscriptions_stripe_customer_id_idx
+  ON public.subscriptions(stripe_customer_id);
 
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 -- Users can read their own subscription row. No INSERT/UPDATE/DELETE policy —
@@ -66,13 +68,17 @@ CREATE POLICY "profiles_update_own_safe"
   );
 
 -- Trigger: reject user-initiated UPDATEs that change plan or stripe_customer_id.
--- The webhook runs as service role and bypasses RLS + triggers via SECURITY DEFINER,
--- but a regular logged-in user UPDATE will hit this.
+-- Service-role webhook writes bypass via the role check below.
+-- Authenticated/anon UPDATEs from app code will hit this guard.
 CREATE OR REPLACE FUNCTION public.guard_profile_billing_columns()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
-  -- Skip the check when running as service role (no JWT claim present).
-  IF current_setting('request.jwt.claim.role', true) IS NULL THEN
+  -- Bypass when the request is from the service role (webhook handlers).
+  -- PostgREST sets request.jwt.claim.role to 'service_role' for service-role
+  -- requests; 'authenticated' or 'anon' for users. Direct DB connections (no
+  -- JWT) return NULL — bypass those too since they're admin/maintenance scripts.
+  IF current_setting('request.jwt.claim.role', true) IN ('service_role')
+     OR current_setting('request.jwt.claim.role', true) IS NULL THEN
     RETURN NEW;
   END IF;
 
