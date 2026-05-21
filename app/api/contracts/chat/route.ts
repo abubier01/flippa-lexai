@@ -46,13 +46,6 @@ export async function POST(req: NextRequest) {
 
     if (!contract) return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
 
-    // Fetch user profile for plan limits
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('plan')
-      .eq('id', user.id)
-      .single()
-
     const active = await getActivePlan(user.id)
     const plan = active.tier
     const limits = PLAN_LIMITS[plan]
