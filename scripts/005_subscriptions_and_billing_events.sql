@@ -31,6 +31,7 @@ CREATE INDEX IF NOT EXISTS subscriptions_stripe_customer_id_idx
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 -- Users can read their own subscription row. No INSERT/UPDATE/DELETE policy —
 -- only the service role (webhook handler) writes to this table.
+DROP POLICY IF EXISTS "subscriptions_select_own" ON public.subscriptions;
 CREATE POLICY "subscriptions_select_own"
   ON public.subscriptions FOR SELECT USING (auth.uid() = user_id);
 
@@ -55,6 +56,7 @@ ALTER TABLE public.billing_events ENABLE ROW LEVEL SECURITY;
 -- on their own row. That's a privilege escalation risk for the new billing
 -- columns and for plan. Replace it with a column-restricted policy.
 DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update_own_safe" ON public.profiles;
 
 CREATE POLICY "profiles_update_own_safe"
   ON public.profiles
