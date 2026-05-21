@@ -17,12 +17,17 @@ export async function getActivePlan(userId: string): Promise<ActivePlan> {
   const supabase = service()
   // Most-recent non-canceled sub per user. There is one in practice; this is
   // defensive ordering in case multiple sub rows exist.
-  const { data: subs } = await supabase
+  const { data: subs, error } = await supabase
     .from('subscriptions')
     .select('status, plan, current_period_end')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
     .limit(1)
+
+  if (error) {
+    console.error('[getActivePlan] subscription query failed:', userId, error.message)
+    throw new Error(`getActivePlan failed: ${error.message}`)
+  }
 
   return decideActivePlan(subs?.[0] ?? null)
 }
