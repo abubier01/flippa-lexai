@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createGroq } from '@ai-sdk/groq'
 import { generateText } from 'ai'
-import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
+import { getActivePlan } from '@/lib/plan/access'
+import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
 
 export async function POST(req: NextRequest) {
@@ -52,7 +53,8 @@ export async function POST(req: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    const plan = (profile?.plan || 'free') as PlanType
+    const active = await getActivePlan(user.id)
+    const plan = active.tier
     const limits = PLAN_LIMITS[plan]
 
     // Count existing messages for this contract (user messages only)
