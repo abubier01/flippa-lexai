@@ -55,6 +55,17 @@ async function main() {
     try {
       const customer = await stripe.customers.create({ email, metadata: { userId: u.id, backfill: 'legacy' } })
       customerId = customer.id
+
+      // Write stripe_customer_id immediately so the upcoming subscription.created
+      // webhook can resolve this user via the FK lookup.
+      const { error: profileUpdateError } = await supabase
+        .from('profiles')
+        .update({ stripe_customer_id: customer.id })
+        .eq('id', u.id)
+      if (profileUpdateError) {
+        throw new Error(`profile update failed: ${profileUpdateError.message}`)
+      }
+
       await stripe.subscriptions.create({
         customer: customer.id,
         items: [{ price: priceId }],
@@ -62,8 +73,8 @@ async function main() {
         proration_behavior: 'none',
         metadata: { userId: u.id, backfill: 'legacy' },
       })
-      // The webhook will populate profiles.stripe_customer_id and the
-      // subscriptions row when customer.subscription.created fires.
+      // The webhook will populate the subscriptions row when
+      // customer.subscription.created fires (stripe_customer_id is already set).
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unknown'
       if (customerId) {
