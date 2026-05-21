@@ -10,7 +10,7 @@ import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 
 const apply = process.argv.includes('--apply')
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -51,16 +51,28 @@ async function main() {
     console.log(`[backfill] ${apply ? 'APPLY' : 'DRY'} ${u.id} (${plan}) -> grandfather subscription`)
     if (!apply) continue
 
-    const customer = await stripe.customers.create({ email, metadata: { userId: u.id, backfill: 'legacy' } })
-    await stripe.subscriptions.create({
-      customer: customer.id,
-      items: [{ price: priceId }],
-      trial_end: FAR_FUTURE_UNIX,
-      proration_behavior: 'none',
-      metadata: { userId: u.id, backfill: 'legacy' },
-    })
-    // The webhook will populate profiles.stripe_customer_id and the
-    // subscriptions row when customer.subscription.created fires.
+    let customerId: string | null = null
+    try {
+      const customer = await stripe.customers.create({ email, metadata: { userId: u.id, backfill: 'legacy' } })
+      customerId = customer.id
+      await stripe.subscriptions.create({
+        customer: customer.id,
+        items: [{ price: priceId }],
+        trial_end: FAR_FUTURE_UNIX,
+        proration_behavior: 'none',
+        metadata: { userId: u.id, backfill: 'legacy' },
+      })
+      // The webhook will populate profiles.stripe_customer_id and the
+      // subscriptions row when customer.subscription.created fires.
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown'
+      if (customerId) {
+        console.error(`[backfill] ORPHAN customer ${customerId} for user ${u.id}: subscription creation failed: ${message}`)
+        console.error(`[backfill] reconcile: delete the Stripe customer or retry subscription creation manually.`)
+      } else {
+        console.error(`[backfill] FAILED for user ${u.id}: customer creation failed: ${message}`)
+      }
+    }
   }
   console.log('[backfill] done')
 }
