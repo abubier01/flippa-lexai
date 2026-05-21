@@ -274,6 +274,24 @@ export default function SettingsPage() {
             )}
           </div>
 
+          {currentPlan !== 'free' && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                const res = await fetch('/api/stripe/portal', { method: 'POST' })
+                const data = await res.json()
+                if (data.url) {
+                  window.location.href = data.url
+                } else {
+                  toast.error(data.error || 'Failed to open billing portal')
+                }
+              }}
+            >
+              Manage billing
+            </Button>
+          )}
+
           {/* Restore plan from Stripe session */}
           <details className="group">
             <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground flex items-center gap-1.5 select-none list-none">
