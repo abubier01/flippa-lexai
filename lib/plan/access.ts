@@ -43,3 +43,38 @@ export async function assertPaidPlan(
   }
   return active
 }
+
+export async function hasTeamAccess(userId: string): Promise<{
+  ok: boolean
+  via: 'own' | 'membership' | null
+  teamId: string | null
+}> {
+  const own = await getActivePlan(userId)
+  if (own.tier === 'team') {
+    // Find their team_id from profiles if any.
+    const supabase = service()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('team_id')
+      .eq('id', userId)
+      .single()
+    return { ok: true, via: 'own', teamId: profile?.team_id ?? null }
+  }
+
+  const supabase = service()
+  const { data: membership } = await supabase
+    .from('team_members')
+    .select('team_id, teams:team_id(owner_id)')
+    .eq('user_id', userId)
+    .single()
+  if (!membership?.team_id) return { ok: false, via: null, teamId: null }
+
+  const ownerId = (membership.teams as unknown as { owner_id: string } | null)?.owner_id
+  if (!ownerId) return { ok: false, via: null, teamId: membership.team_id }
+
+  const owner = await getActivePlan(ownerId)
+  if (owner.tier === 'team') {
+    return { ok: true, via: 'membership', teamId: membership.team_id }
+  }
+  return { ok: false, via: null, teamId: membership.team_id }
+}
