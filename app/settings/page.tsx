@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { User, Lock, CreditCard, Loader2, Shield, Bell, Check, Zap, RefreshCw } from 'lucide-react'
+import { User, Lock, CreditCard, Loader2, Shield, Bell, Check, Zap } from 'lucide-react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
 import { PRODUCTS } from '@/lib/products'
@@ -22,9 +22,6 @@ export default function SettingsPage() {
   const [pwLoading, setPwLoading] = useState(false)
   const [currentPlan, setCurrentPlan] = useState<PlanType>('free')
   const [contractsUsed, setContractsUsed] = useState(0)
-  const [syncSessionId, setSyncSessionId] = useState('')
-  const [syncing, setSyncing] = useState(false)
-
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data }) => {
@@ -76,23 +73,6 @@ export default function SettingsPage() {
       setPwNew('')
       setPwConfirm('')
     }
-  }
-
-  async function handleSyncPlan(e: React.FormEvent) {
-    e.preventDefault()
-    if (!syncSessionId.trim()) { toast.error('Enter your Stripe session ID'); return }
-    setSyncing(true)
-    const res = await fetch('/api/stripe/sync-plan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: syncSessionId.trim() }),
-    })
-    const data = await res.json()
-    setSyncing(false)
-    if (!res.ok) { toast.error(data.error || 'Failed to sync plan'); return }
-    setCurrentPlan(data.plan as PlanType)
-    setSyncSessionId('')
-    toast.success(`Plan updated to ${data.plan}! Refresh the page to see changes.`)
   }
 
   const notificationSettings = [
@@ -291,25 +271,6 @@ export default function SettingsPage() {
               Manage billing
             </Button>
           )}
-
-          {/* Restore plan from Stripe session */}
-          <details className="group">
-            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground flex items-center gap-1.5 select-none list-none">
-              <RefreshCw className="w-3 h-3" />
-              Payment went through but plan not updated? Restore it here.
-            </summary>
-            <form onSubmit={handleSyncPlan} className="mt-3 flex gap-2">
-              <Input
-                placeholder="Stripe session ID (cs_...)"
-                value={syncSessionId}
-                onChange={e => setSyncSessionId(e.target.value)}
-                className="text-xs h-8"
-              />
-              <Button type="submit" size="sm" variant="outline" disabled={syncing} className="shrink-0">
-                {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Restore'}
-              </Button>
-            </form>
-          </details>
 
           {/* Plan cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
