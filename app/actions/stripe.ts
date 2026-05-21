@@ -3,6 +3,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { getStripe } from '@/lib/stripe'
 import { getProductById } from '@/lib/products'
+import { getOrCreateStripeCustomer } from '@/lib/stripe/customers'
+import { planToPriceId } from '@/lib/stripe/price-to-plan'
+import { buildSessionIdempotencyKey } from '@/lib/stripe/idempotency-key'
 
 export async function startCheckoutSession(
   productId: string,
@@ -15,30 +18,25 @@ export async function startCheckoutSession(
   const product = getProductById(productId)
   if (!product) throw new Error(`Invalid product: ${productId}`)
 
-  // Embed the userId and plan in metadata — verified server-side on completion
-  const session = await stripe.checkout.sessions.create({
-    ui_mode: 'embedded',
-    redirect_on_completion: 'never',
-    mode: 'payment',
-    line_items: [
-      {
-        price_data: {
-          currency: 'usd',
-          product_data: {
-            name: product.name,
-            description: product.description,
-          },
-          unit_amount: product.priceInCents,
-        },
-        quantity: 1,
+  const customerId = await getOrCreateStripeCustomer(user.id, user.email)
+  const priceId = planToPriceId(product.plan)
+
+  const session = await stripe.checkout.sessions.create(
+    {
+      ui_mode: 'embedded',
+      redirect_on_completion: 'never',
+      mode: 'subscription',
+      customer: customerId,
+      client_reference_id: user.id,
+      line_items: [{ price: priceId, quantity: 1 }],
+      metadata: {
+        userId: user.id,
+        productId: product.id,
+        plan: product.plan,
       },
-    ],
-    metadata: {
-      userId: user.id,
-      productId: product.id,
-      plan: product.plan,
     },
-  })
+    { idempotencyKey: buildSessionIdempotencyKey(user.id, priceId) },
+  )
 
   if (!session.client_secret) throw new Error('Failed to create checkout session.')
   return { clientSecret: session.client_secret, sessionId: session.id }

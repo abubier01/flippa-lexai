@@ -12,11 +12,13 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 export default function StripeEmbeddedCheckout({ productId }: { productId: string }) {
   const router = useRouter()
   const sessionIdRef = useRef<string | null>(null)
+  const clientSecretRef = useRef<string | null>(null)
   const [verifying, setVerifying] = useState(false)
 
   const fetchClientSecret = useCallback(async () => {
+    if (clientSecretRef.current) return clientSecretRef.current
     const { clientSecret, sessionId } = await startCheckoutSession(productId)
-    // Store session ID in ref so onComplete can access it without re-render
+    clientSecretRef.current = clientSecret
     sessionIdRef.current = sessionId
     return clientSecret
   }, [productId])
