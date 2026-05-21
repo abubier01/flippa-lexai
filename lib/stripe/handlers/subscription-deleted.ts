@@ -22,6 +22,12 @@ export async function handleSubscriptionDeleted(
     .eq('stripe_customer_id', customerId)
     .single()
   if (profileLookupError) {
+    if (profileLookupError.code === 'PGRST116') {
+      // Profile already deleted (e.g., GDPR deletion); nothing to downgrade.
+      // Acknowledge to stop Stripe retries.
+      console.warn(`[subscription-deleted] no profile for customer ${customerId} (already deleted?)`)
+      return { userId: null }
+    }
     throw new Error(`No profile found for customer ${customerId}: ${profileLookupError.message}`)
   }
   const userId = profile.id
