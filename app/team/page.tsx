@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import TeamDashboard from '@/components/team/team-dashboard'
+import { hasTeamAccess } from '@/lib/plan/access'
 
 export default async function TeamPage() {
   // Use user auth client only for getUser() — all DB reads use service role to bypass RLS
@@ -22,8 +23,10 @@ export default async function TeamPage() {
     .eq('id', user.id)
     .single()
 
-  // Show upgrade prompt in-page instead of redirecting — avoids redirect loops
-  if (!profile || profile?.plan !== 'team') {
+  // Check team access via subscription + membership (team members have plan='free'
+  // but should still see the team page when the team owner has an active team plan).
+  const access = await hasTeamAccess(user.id)
+  if (!access.ok) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
         <div className="w-14 h-14 rounded-2xl bg-accent flex items-center justify-center mb-6">
@@ -42,20 +45,23 @@ export default async function TeamPage() {
     )
   }
 
+  // Use access.teamId (resolved from subscription or membership) as the team lookup key.
+  const effectiveTeamId = access.teamId ?? profile?.team_id
+
   let team = null
   let members: unknown[] = []
   let invites: unknown[] = []
   let sharedContracts: unknown[] = []
   let teamAnalytics = null
 
-  if (profile?.team_id) {
+  if (effectiveTeamId) {
     const [teamRes, membersRes, invitesRes, contractsRes] = await Promise.all([
-      service.from('teams').select('*').eq('id', profile.team_id).single(),
-      service.from('team_members').select('*').eq('team_id', profile.team_id),
-      service.from('team_invites').select('*').eq('team_id', profile.team_id).eq('status', 'pending'),
+      service.from('teams').select('*').eq('id', effectiveTeamId).single(),
+      service.from('team_members').select('*').eq('team_id', effectiveTeamId),
+      service.from('team_invites').select('*').eq('team_id', effectiveTeamId).eq('status', 'pending'),
       service.from('contracts')
         .select('*, contract_analyses(risks, summary)')
-        .eq('team_id', profile.team_id)
+        .eq('team_id', effectiveTeamId)
         .eq('shared_with_team', true)
         .order('created_at', { ascending: false }),
     ])
