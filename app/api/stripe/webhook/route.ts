@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type Stripe from 'stripe'
 import { getStripe } from '@/lib/stripe'
-import { tryClaimEvent, markEventProcessed } from '@/lib/stripe/event-deduper'
+import { tryClaimEvent, markEventProcessed, releaseClaim } from '@/lib/stripe/event-deduper'
 import { handleCheckoutSessionCompleted } from '@/lib/stripe/handlers/checkout-session-completed'
 import { handleSubscriptionUpserted } from '@/lib/stripe/handlers/subscription-updated'
 import { handleSubscriptionDeleted } from '@/lib/stripe/handlers/subscription-deleted'
@@ -82,6 +82,9 @@ export async function POST(req: NextRequest) {
     // processed_at = NULL; the retry will see claim=false but the event still
     // needs to run. Adjust strategy: delete the dedup row on handler failure
     // so the retry can re-claim. See cleanup below.
+    // If releaseClaim itself fails, the event is silently lost on Stripe's retry
+    // (claim returns false, route returns 200 deduped). DB-down + handler-fail is
+    // a chain-of-failures; surface via the deduper's internal logging.
     await releaseClaim(event.id)
     return NextResponse.json({ error: 'Handler failed' }, { status: 500 })
   }
@@ -97,11 +100,3 @@ function extractUserId(event: Stripe.Event): string | null {
   return null
 }
 
-async function releaseClaim(eventId: string) {
-  const { createClient } = await import('@supabase/supabase-js')
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-  await supabase.from('billing_events').delete().eq('event_id', eventId)
-}
