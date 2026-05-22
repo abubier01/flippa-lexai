@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
+import { getActivePlan } from '@/lib/plan/access'
+import { PLAN_LIMITS } from '@/lib/plan-limits'
 
 // Dynamic import for server-side document parsing
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
@@ -38,7 +39,8 @@ export async function POST(req: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    const plan = (profile?.plan || 'free') as PlanType
+    const active = await getActivePlan(user.id)
+    const plan = active.tier
     const limits = PLAN_LIMITS[plan]
     let contractsThisMonth = profile?.contracts_this_month || 0
     const usageResetAt = profile?.usage_reset_at ? new Date(profile.usage_reset_at) : new Date()

@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
+import { requireAdminAccess } from '@/lib/security/admin-guard'
 
 // Uses pg directly (POSTGRES_URL_NON_POOLING is available at Next.js runtime)
 // to run DDL statements needed for the team tables.
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = await requireAdminAccess(request)
+  if (denied) return denied
+
   const dbUrl = process.env.POSTGRES_URL_NON_POOLING!
 
   if (!dbUrl) {

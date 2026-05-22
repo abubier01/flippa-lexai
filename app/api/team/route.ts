@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { hasTeamAccess } from '@/lib/plan/access'
 
 function serviceRole() {
   return createServiceClient(
@@ -56,11 +57,12 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan, team_id')
+    .select('team_id')
     .eq('id', user.id)
     .single()
 
-  if (profile?.plan !== 'team') {
+  const access = await hasTeamAccess(user.id)
+  if (!access.ok || access.via !== 'own') {
     return NextResponse.json({ error: 'Team plan required to create a team.' }, { status: 403 })
   }
 
@@ -111,7 +113,7 @@ export async function POST(req: NextRequest) {
     .from('profiles').select('id, full_name, plan').eq('id', user.id).single()
 
   const memberWithProfile = memberRow
-    ? { ...memberRow, profiles: ownerProfile ?? { id: user.id, full_name: null, plan: 'team' } }
+    ? { ...memberRow, profiles: ownerProfile ?? { id: user.id, full_name: null } }
     : null
 
   return NextResponse.json({ team, members: memberWithProfile ? [memberWithProfile] : [] })

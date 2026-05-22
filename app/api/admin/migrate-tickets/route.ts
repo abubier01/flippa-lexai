@@ -1,8 +1,5 @@
 import { NextResponse } from 'next/server'
-
-const PROJECT_REF = process.env.NEXT_PUBLIC_SUPABASE_URL
-  ?.replace('https://', '')
-  .replace('.supabase.co', '')
+import { requireAdminAccess } from '@/lib/security/admin-guard'
 
 const SQL = `
 CREATE TABLE IF NOT EXISTS public.support_tickets (
@@ -59,13 +56,18 @@ CREATE TRIGGER ticket_updated_at BEFORE UPDATE ON public.support_tickets
   FOR EACH ROW EXECUTE FUNCTION public.update_ticket_updated_at();
 `
 
-export async function POST() {
-  if (!PROJECT_REF) {
-    return NextResponse.json({ error: 'Missing SUPABASE_URL' }, { status: 500 })
+export async function POST(request: Request) {
+  const denied = await requireAdminAccess(request)
+  if (denied) return denied
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+  if (!supabaseUrl) {
+    return NextResponse.json({ error: 'NEXT_PUBLIC_SUPABASE_URL is not configured' }, { status: 500 })
   }
+  const projectRef = supabaseUrl.replace('https://', '').replace('.supabase.co', '')
 
   const res = await fetch(
-    `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
+    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
     {
       method: 'POST',
       headers: {

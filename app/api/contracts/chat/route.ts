@@ -2,15 +2,34 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createGroq } from '@ai-sdk/groq'
 import { generateText } from 'ai'
-import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
-
-const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
+import { getActivePlan } from '@/lib/plan/access'
+import { PLAN_LIMITS } from '@/lib/plan-limits'
+import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
 
 export async function POST(req: NextRequest) {
   try {
+    const groqApiKey = process.env.GROQ_API_KEY?.trim()
+    if (!groqApiKey) {
+      return NextResponse.json({ error: 'GROQ_API_KEY is not configured' }, { status: 500 })
+    }
+    const groq = createGroq({ apiKey: groqApiKey })
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const ip = getClientIp(req)
+    const limitResult = consumeRateLimit({
+      key: `ai:chat:${user.id}:${ip}`,
+      limit: 60,
+      windowMs: 15 * 60 * 1000,
+    })
+    if (!limitResult.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please try again shortly.' },
+        { status: 429, headers: rateLimitHeaders(limitResult) }
+      )
+    }
 
     const { contractId, message } = await req.json()
     if (!contractId || !message) {
@@ -27,14 +46,8 @@ export async function POST(req: NextRequest) {
 
     if (!contract) return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
 
-    // Fetch user profile for plan limits
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('plan')
-      .eq('id', user.id)
-      .single()
-
-    const plan = (profile?.plan || 'free') as PlanType
+    const active = await getActivePlan(user.id)
+    const plan = active.tier
     const limits = PLAN_LIMITS[plan]
 
     // Count existing messages for this contract (user messages only)
@@ -106,7 +119,7 @@ Assistant:`
       model: groq('llama-3.3-70b-versatile'),
       prompt,
       temperature: 0.3,
-      maxTokens: 1024,
+      maxOutputTokens: 1024,
     })
 
     const reply = text.trim()

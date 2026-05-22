@@ -17,7 +17,7 @@ interface Member {
   user_id: string
   role: 'owner' | 'admin' | 'member'
   joined_at: string
-  profiles: { id: string; full_name: string | null; plan: string }
+  profiles: { id: string; full_name: string | null; plan?: string }
 }
 
 interface Invite {

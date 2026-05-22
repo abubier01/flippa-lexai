@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 import type { PlanType } from '@/lib/plan-limits'
+
+const TIER_ORDER: Record<PlanType, number> = { free: 0, pro: 1, team: 2 }
 
 export async function POST(req: NextRequest) {
   try {
+    const stripe = getStripe()
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -12,37 +15,38 @@ export async function POST(req: NextRequest) {
     const { sessionId } = await req.json()
     if (!sessionId) return NextResponse.json({ error: 'Session ID required' }, { status: 400 })
 
-    // Retrieve the session directly from Stripe — the source of truth
     const session = await stripe.checkout.sessions.retrieve(sessionId)
-
-    // Security checks:
-    // 1. Payment must be paid
     if (session.payment_status !== 'paid') {
       return NextResponse.json({ error: 'Payment not completed' }, { status: 402 })
     }
-
-    // 2. The userId in metadata must match the authenticated user
-    if (session.metadata?.userId !== user.id) {
+    if (session.client_reference_id !== user.id && session.metadata?.userId !== user.id) {
       return NextResponse.json({ error: 'Session does not belong to this user' }, { status: 403 })
     }
 
-    // 3. The plan must be valid
     const plan = session.metadata?.plan as PlanType
     if (!plan || !['pro', 'team'].includes(plan)) {
       return NextResponse.json({ error: 'Invalid plan in session' }, { status: 400 })
     }
 
-    // Update the user's plan in Supabase
-    const { error } = await supabase
+    // Defense-in-depth (S8): even though the webhook owns DB writes, surface
+    // any tier-downgrade attempt as an error so the success page can show a
+    // sensible message instead of celebrating a downgrade.
+    const { data: profile } = await supabase
       .from('profiles')
-      .update({ plan })
+      .select('plan')
       .eq('id', user.id)
-
-    if (error) throw error
+      .single()
+    const currentTier = TIER_ORDER[(profile?.plan as PlanType) ?? 'free']
+    if (TIER_ORDER[plan] < currentTier) {
+      return NextResponse.json(
+        { error: 'Cannot downgrade via checkout. Use the billing portal.' },
+        { status: 409 },
+      )
+    }
 
     return NextResponse.json({ success: true, plan })
   } catch (err) {
-    console.error('[v0] Stripe verify error:', err)
+    console.error('[stripe-verify]', err)
     return NextResponse.json({ error: 'Failed to verify payment' }, { status: 500 })
   }
 }

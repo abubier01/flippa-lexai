@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { startCheckoutSession } from '@/app/actions/stripe'
@@ -12,11 +12,20 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 export default function StripeEmbeddedCheckout({ productId }: { productId: string }) {
   const router = useRouter()
   const sessionIdRef = useRef<string | null>(null)
+  const clientSecretRef = useRef<string | null>(null)
   const [verifying, setVerifying] = useState(false)
 
+  // Reset cache when switching products so a remount-in-place (e.g. an in-page
+  // plan toggle) doesn't return the prior product's session.
+  useEffect(() => {
+    clientSecretRef.current = null
+    sessionIdRef.current = null
+  }, [productId])
+
   const fetchClientSecret = useCallback(async () => {
+    if (clientSecretRef.current) return clientSecretRef.current
     const { clientSecret, sessionId } = await startCheckoutSession(productId)
-    // Store session ID in ref so onComplete can access it without re-render
+    clientSecretRef.current = clientSecret
     sessionIdRef.current = sessionId
     return clientSecret
   }, [productId])

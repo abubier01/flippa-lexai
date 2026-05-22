@@ -26,6 +26,7 @@ export default function ContractChatTab({ contractId, initialMessages }: Props) 
   const [loading, setLoading] = useState(false)
   const [limitReached, setLimitReached] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const localIdRef = useRef(0)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -36,9 +37,11 @@ export default function ContractChatTab({ contractId, initialMessages }: Props) 
     if (!text || loading) return
     setInput('')
     setLoading(true)
+    localIdRef.current += 1
+    const userMsgId = `local-user-${localIdRef.current}`
 
     const userMsg: ChatMessage = {
-      id: Date.now().toString(),
+      id: userMsgId,
       contract_id: contractId,
       user_id: '',
       role: 'user',
@@ -65,7 +68,7 @@ export default function ContractChatTab({ contractId, initialMessages }: Props) 
       }
 
       const assistantMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: `local-assistant-${localIdRef.current}`,
         contract_id: contractId,
         user_id: '',
         role: 'assistant',

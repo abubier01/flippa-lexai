@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { hasTeamAccess } from '@/lib/plan/access'
 
 function serviceRole() {
   return createServiceClient(
@@ -24,7 +25,8 @@ export async function POST(req: NextRequest) {
     .eq('id', user.id)
     .single()
 
-  if (profile?.plan !== 'team' || !profile?.team_id) {
+  const access = await hasTeamAccess(user.id)
+  if (!access.ok || !profile?.team_id) {
     return NextResponse.json({ error: 'Team plan required.' }, { status: 403 })
   }
 
