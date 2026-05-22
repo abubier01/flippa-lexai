@@ -17,22 +17,19 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('plan, team_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.team_id) {
+  const access = await hasTeamAccess(user.id)
+  if (!access.ok || !access.teamId) {
     return NextResponse.json({ team: null, members: [], invites: [] })
   }
+
+  const teamId = access.teamId
 
   const service = serviceRole()
 
   const [teamRes, membersRes, invitesRes] = await Promise.all([
-    service.from('teams').select('*').eq('id', profile.team_id).single(),
-    service.from('team_members').select('*').eq('team_id', profile.team_id),
-    service.from('team_invites').select('*').eq('team_id', profile.team_id).eq('status', 'pending'),
+    service.from('teams').select('*').eq('id', teamId).single(),
+    service.from('team_members').select('*').eq('team_id', teamId),
+    service.from('team_invites').select('*').eq('team_id', teamId).eq('status', 'pending'),
   ])
 
   const rawMembers: { user_id: string }[] = membersRes.data || []
