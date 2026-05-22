@@ -226,34 +226,34 @@ CREATE TRIGGER profiles_guard_billing
   FOR EACH ROW EXECUTE FUNCTION public.guard_profile_billing_columns();
 ```
 
-- [ ] **Step 2: Apply the migration locally**
+- [ ] **Step 2: Apply the migration (human, via Supabase SQL Editor)**
 
-Run via your Supabase admin tooling (use the same path the existing `scripts/00*_*.sql` files are applied — e.g. `psql` against the Supabase database URL):
-```bash
-psql "$SUPABASE_DB_URL" -f scripts/005_subscriptions_and_billing_events.sql
+The implementer subagent does NOT apply this migration — the human operator does. After writing the .sql file, the implementer should commit and stop. The controller will pause and prompt the operator:
+
+> Migration is ready at `scripts/005_subscriptions_and_billing_events.sql`. Open the Supabase project → SQL Editor → New query → paste the file contents → Run. Confirm no errors before continuing.
+
+- [ ] **Step 3: Verify the schema (human, via SQL Editor)**
+
+In the Supabase SQL Editor, paste and run:
+```sql
+SELECT column_name FROM information_schema.columns
+  WHERE table_schema='public' AND table_name='subscriptions' ORDER BY ordinal_position;
+SELECT column_name FROM information_schema.columns
+  WHERE table_schema='public' AND table_name='billing_events' ORDER BY ordinal_position;
+SELECT column_name FROM information_schema.columns
+  WHERE table_schema='public' AND table_name='profiles' AND column_name='stripe_customer_id';
 ```
+Expected: each query returns the expected columns.
 
-Expected: no errors.
+- [ ] **Step 4: Smoke-test the trigger (human, via SQL Editor)**
 
-- [ ] **Step 3: Verify the schema**
-
-```bash
-psql "$SUPABASE_DB_URL" -c "\d public.subscriptions"
-psql "$SUPABASE_DB_URL" -c "\d public.billing_events"
-psql "$SUPABASE_DB_URL" -c "\d public.profiles" | grep stripe_customer_id
-```
-
-Expected: each command shows the expected columns.
-
-- [ ] **Step 4: Smoke-test the trigger**
-
-Open a Supabase SQL editor session as an authenticated user (not service role) and run:
+In the Supabase SQL Editor, run as a regular authenticated user (use the "Impersonate user" feature, NOT service role):
 ```sql
 UPDATE public.profiles SET plan = 'team' WHERE id = auth.uid();
 ```
 Expected: `ERROR: profiles.plan is not user-writable`.
 
-Run the same as service role: it should succeed (no exception).
+Switch to the service role and run the same UPDATE against a real test profile id. Expected: succeeds without exception.
 
 - [ ] **Step 5: Commit**
 
