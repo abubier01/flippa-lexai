@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type Stripe from 'stripe'
 import { getStripe } from '@/lib/stripe'
-import { tryClaimEvent, markEventProcessed, releaseClaim } from '@/lib/stripe/event-deduper'
+import { tryClaimEvent, markEventProcessed, markEventFailed } from '@/lib/stripe/event-deduper'
 import { handleCheckoutSessionCompleted } from '@/lib/stripe/handlers/checkout-session-completed'
 import { handleSubscriptionUpserted } from '@/lib/stripe/handlers/subscription-updated'
 import { handleSubscriptionDeleted } from '@/lib/stripe/handlers/subscription-deleted'
@@ -39,16 +39,21 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = extractUserId(event)
-  let claimed: boolean
+  let claimState: Awaited<ReturnType<typeof tryClaimEvent>>['state']
   try {
-    claimed = await tryClaimEvent(event.id, event.type, userId, event as unknown)
+    const claim = await tryClaimEvent(event.id, event.type, userId, event as unknown)
+    claimState = claim.state
   } catch (err) {
     console.error('[stripe-webhook] claim failed:', event.id, err)
     return NextResponse.json({ error: 'Claim failed' }, { status: 500 })
   }
-  if (!claimed) {
-    // Already processed (or in-flight). 200 so Stripe stops retrying.
+  if (claimState === 'already_processed') {
+    // Safe dedup success.
     return NextResponse.json({ received: true, deduped: true })
+  }
+  if (claimState === 'in_flight') {
+    // Another worker still holds the lease. Return retryable status so Stripe retries.
+    return NextResponse.json({ error: 'Event is already in-flight' }, { status: 500 })
   }
 
   try {
@@ -78,14 +83,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'handler failed'
     console.error('[stripe-webhook] handler error:', event.id, event.type, message)
-    // Returning 500 makes Stripe retry. The dedup row remains with
-    // processed_at = NULL; the retry will see claim=false but the event still
-    // needs to run. Adjust strategy: delete the dedup row on handler failure
-    // so the retry can re-claim. See cleanup below.
-    // If releaseClaim itself fails, the event is silently lost on Stripe's retry
-    // (claim returns false, route returns 200 deduped). DB-down + handler-fail is
-    // a chain-of-failures; surface via the deduper's internal logging.
-    await releaseClaim(event.id)
+    await markEventFailed(event.id, message)
     return NextResponse.json({ error: 'Handler failed' }, { status: 500 })
   }
 }
@@ -99,4 +97,3 @@ function extractUserId(event: Stripe.Event): string | null {
   }
   return null
 }
-

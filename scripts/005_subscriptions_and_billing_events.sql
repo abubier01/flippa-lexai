@@ -41,12 +41,20 @@ CREATE TABLE IF NOT EXISTS public.billing_events (
   type TEXT NOT NULL,
   user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   payload JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'processing' CHECK (status IN ('processing','processed','failed')),
+  processing_started_at TIMESTAMPTZ,
+  processing_expires_at TIMESTAMPTZ,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
   received_at TIMESTAMPTZ DEFAULT NOW(),
   processed_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS billing_events_user_id_idx ON public.billing_events(user_id);
 CREATE INDEX IF NOT EXISTS billing_events_type_idx ON public.billing_events(type);
+CREATE INDEX IF NOT EXISTS billing_events_status_idx ON public.billing_events(status);
+CREATE INDEX IF NOT EXISTS billing_events_processing_expires_idx
+  ON public.billing_events(processing_expires_at);
 
 ALTER TABLE public.billing_events ENABLE ROW LEVEL SECURITY;
 -- No policies = service-role-only access. Users cannot read or write.
