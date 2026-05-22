@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import ContractAnalysisView from '@/components/contracts/contract-analysis-view'
 import ContractProcessing from '@/components/contracts/contract-processing'
+import { hasTeamAccess } from '@/lib/plan/access'
 
 export default async function ContractPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -31,12 +32,15 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
 
   if (!contract) notFound()
 
-  // Access check: user owns it, OR it's shared with a team the user is a member of
+  const access = await hasTeamAccess(user.id)
+
+  // Access check: user owns it, OR it's shared with a team that currently has entitlement.
   const isOwner = contract.user_id === user.id
   const isTeamMember =
     contract.shared_with_team === true &&
-    profile?.team_id != null &&
-    contract.team_id === profile.team_id
+    access.ok &&
+    access.teamId != null &&
+    contract.team_id === access.teamId
 
   if (!isOwner && !isTeamMember) notFound()
 
@@ -62,7 +66,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
       analysis={analysis}
       initialMessages={messages || []}
       userPlan={(profile?.plan ?? 'free') as string}
-      userTeamId={profile?.team_id ?? null}
+      userTeamId={access.ok ? access.teamId : null}
       isTeamViewer={!isOwner && isTeamMember}
     />
   )
