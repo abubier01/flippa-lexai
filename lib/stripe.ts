@@ -9,7 +9,10 @@ export function getStripe(): Stripe {
     throw new Error('STRIPE_SECRET_KEY is not set')
   }
 
-  if (process.env.NODE_ENV === 'production' && !stripeKey.startsWith('sk_live_')) {
+  // Require sk_live_* only on actual production deploys.
+  // Vercel sets VERCEL_ENV='production' for prod and VERCEL_ENV='preview' for branch
+  // deploys; preview deploys and local dev are allowed to use sk_test_*.
+  if (process.env.VERCEL_ENV === 'production' && !stripeKey.startsWith('sk_live_')) {
     throw new Error('Production requires a Stripe live secret key (sk_live_*)')
   }
 
