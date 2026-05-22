@@ -7,6 +7,7 @@ export { decideActivePlan, GRACE_PERIOD_DAYS } from './access-logic'
 export type { ActivePlan, SubscriptionRow } from './access-logic'
 
 function service() {
+  // Service role is required: entitlement checks resolve subscription/team state across arbitrary users (owner + members).
   return createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,

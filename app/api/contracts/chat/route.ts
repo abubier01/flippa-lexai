@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const ip = getClientIp(req)
-    const limitResult = consumeRateLimit({
+    const limitResult = await consumeRateLimit({
       key: `ai:chat:${user.id}:${ip}`,
       limit: 60,
       windowMs: 15 * 60 * 1000,

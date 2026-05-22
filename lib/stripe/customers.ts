@@ -3,6 +3,7 @@ import { getStripe } from '@/lib/stripe'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 function service() {
+  // Service role is required: Stripe customer linkage writes profile fields server-side independent of request session context.
   return createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,

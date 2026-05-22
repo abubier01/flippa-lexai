@@ -11,6 +11,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
+  // Service role is required: team-shared contract reads and related records may span rows not directly readable via caller-bound RLS.
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!

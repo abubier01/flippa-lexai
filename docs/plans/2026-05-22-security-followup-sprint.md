@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-22
 **Branch baseline:** `chore/post-pr1-cleanup` at `HEAD`
-**Status:** Draft — pending Codex review
+**Status:** Draft — reviewed, ready for implementation
 
 ## Context
 
@@ -37,7 +37,7 @@ sprint doc so future audits start from an accurate baseline.
 
 | # | PR | Depends on |
 |---|---|---|
-| **PR-A** | Audit refresh — rewrite `SECURITY_HARDENING_SPRINT.md` against HEAD | — |
+| **PR-A** | Audit refresh — create/refresh `docs/plans/SECURITY_HARDENING_SPRINT.md` against HEAD | — |
 | **PR-B** | CI workflow (`lint` + `typecheck` + `test`) | A |
 | **PR-C** | `/api/tickets` POST hardening | B |
 | **PR-D** | Shared rate limiter (Upstash) | B |
@@ -52,7 +52,7 @@ the largest blast radius and benefits from PR-E catching regressions.
 
 ## PR-A — Audit refresh
 
-**Goal:** `SECURITY_HARDENING_SPRINT.md` reflects HEAD.
+**Goal:** `docs/plans/SECURITY_HARDENING_SPRINT.md` exists and reflects `HEAD`.
 
 **Changes:**
 
@@ -62,11 +62,15 @@ the largest blast radius and benefits from PR-E catching regressions.
 - Add a "How to re-audit" section: tell future reviewers to grep for the cited
   symbols (`requireAdminAccess`, `mode: 'subscription'`, `consumeRateLimit`)
   against HEAD before opening findings.
+- If the legacy file is missing, create it at
+  `docs/plans/SECURITY_HARDENING_SPRINT.md` and mark it as the canonical audit
+  baseline for future reviews.
 
 **Out of scope:** code or test changes.
 
 **Acceptance:** doc renders cleanly; every Resolved claim has a file:line
-citation; every Open item has an owner PR number.
+citation; every Open item has an owner PR number; the canonical file is present
+at `docs/plans/SECURITY_HARDENING_SPRINT.md`.
 
 ---
 
@@ -80,15 +84,19 @@ citation; every Open item has an owner PR number.
 - Create `.github/workflows/ci.yml`:
   - Trigger: `pull_request` to `main`, `push` to `main`.
   - Node 20 (matches Vercel runtime).
-  - Steps: checkout → setup-node with npm cache → `npm ci` → `npm run lint` → `npm run typecheck` → `npm run test`.
+  - Three jobs (`lint`, `typecheck`, `test`) so each appears as an independent
+    status check.
+  - Each job runs: checkout → setup-node with npm cache → `npm ci` → one target
+    command (`npm run lint` or `npm run typecheck` or `npm run test`).
   - Concurrency group keyed on `${{ github.ref }}` with `cancel-in-progress: true`.
 - Do not configure required-status-checks in this PR (repo-settings change, not
   a file change). Note as follow-up in the PR description.
 
 **Out of scope:** secrets scanning, dependency review, Vercel preview gating.
 
-**Acceptance:** opening a PR shows three green checks; deliberately breaking
-each (lint error, type error, failing test) turns the right check red.
+**Acceptance:** opening a PR shows three green checks (`lint`, `typecheck`,
+`test`); deliberately breaking each (lint error, type error, failing test)
+turns only the corresponding check red.
 
 ---
 
@@ -121,6 +129,8 @@ support inbox.
 - `for i in {1..10}; do curl -X POST /api/tickets ...; done` — first 5 succeed,
   rest return 429.
 - Repeater with same email across IPs hits the email limit after 3.
+- Add deterministic automated tests for `/api/tickets` asserting: 6th request
+  from same IP is 429, and 4th request for same normalized email is 429.
 
 ---
 
@@ -131,8 +141,9 @@ Currently [lib/security/rate-limit.ts:26-35](../../lib/security/rate-limit.ts#L2
 `globalThis` `Map` — each lambda instance has its own counter, so the effective
 limit is `configured_limit × instance_count`.
 
-**Approach:** keep the public API (`consumeRateLimit`, `rateLimitHeaders`,
-`getClientIp`) unchanged. Swap the backend.
+**Approach:** keep the external contract (`RateLimitResult` shape, key
+construction strategy, header behavior) unchanged while swapping the backend.
+`consumeRateLimit` will become async and return `Promise<RateLimitResult>`.
 
 **Changes:**
 
@@ -170,8 +181,7 @@ regressions fail CI.
 
 - Production + `ENABLE_ADMIN_ROUTES` unset → 404.
 - Valid `x-admin-key` → null (allow).
-- Invalid `x-admin-key` → 403, timing-safe (compare two equal-length-but-
-  different keys).
+- Invalid `x-admin-key` (same length as valid key) → 403.
 - No key + email in allowlist → null.
 - No key + email not in allowlist → 403.
 - No key + no allowlist + `ADMIN_API_KEY` set → 403 (not 500).
@@ -199,8 +209,8 @@ controllable `auth.getUser()` and chainable `from().select()...`. Factory in
 `lib/security/__tests__/helpers.ts`.
 
 **Acceptance:** `npm run test` passes locally and in CI from PR-B; deliberately
-breaking `admin-guard.ts` (e.g. removing the timing-safe compare) turns at
-least one test red.
+breaking `admin-guard.ts` logic (for example allowing invalid `x-admin-key`) turns
+at least one test red.
 
 **Out of scope:** browser e2e, load tests, fuzzing.
 
@@ -242,11 +252,11 @@ PR-E still pass.
 
 ---
 
-## Open questions for Codex review
+## Review decisions applied
 
-- Is fixed-window rate limiting acceptable, or should PR-D move to sliding
-  window for the AI endpoints (where 12/hour is sensitive to clock alignment)?
-- Should PR-C reject unauthenticated POSTs outright instead of rate-limiting
-  them? Trade-off: blocks legit users without an account from filing tickets.
-- For PR-F, is there an appetite to add new RLS policies in this sprint, or
-  strictly conservative (annotate + defer)?
+- **PR-D algorithm:** keep fixed-window in this sprint; defer sliding-window
+  unless production telemetry shows boundary-burst abuse.
+- **PR-C auth posture:** keep unauthenticated `/api/tickets` POST allowed with
+  dual rate limits + honeypot (do not force sign-in for support intake).
+- **PR-F scope:** conservative for this sprint — annotate + defer broad new RLS
+  policy work to follow-up PR(s).

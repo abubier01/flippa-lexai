@@ -5,6 +5,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { hasTeamAccess } from '@/lib/plan/access'
 
 function serviceRole() {
+  // Service role is required: toggling team sharing updates contract visibility fields that can be blocked by current RLS update policies.
   return createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!

@@ -3,6 +3,7 @@ import type Stripe from 'stripe'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 function service() {
+  // Service role is required: renewal webhooks update shared subscription records without user-session credentials.
   return createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,

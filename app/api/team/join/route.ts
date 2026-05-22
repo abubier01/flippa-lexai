@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
   const { token } = await req.json()
   if (!token) return NextResponse.json({ error: 'Token is required.' }, { status: 400 })
 
+  // Service role is required: accepting invites mutates invite/member/profile rows that are not all writable under invitee RLS.
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,

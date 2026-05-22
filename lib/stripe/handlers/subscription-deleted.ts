@@ -3,6 +3,7 @@ import type Stripe from 'stripe'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 function service() {
+  // Service role is required: cancellation webhooks downgrade persisted entitlements without relying on browser auth.
   return createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,

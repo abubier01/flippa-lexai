@@ -6,6 +6,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { hasTeamAccess } from '@/lib/plan/access'
 
 function serviceRole() {
+  // Service role is required: team API performs owner-scoped writes and cross-member/profile reads beyond caller-bound RLS scope.
   return createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -70,7 +71,6 @@ export async function POST(req: NextRequest) {
   const { name } = await req.json()
   if (!name?.trim()) return NextResponse.json({ error: 'Team name is required.' }, { status: 400 })
 
-  // Use service role to bypass RLS for all mutations
   const service = serviceRole()
 
   const { data: team, error: teamErr } = await service

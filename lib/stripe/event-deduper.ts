@@ -19,6 +19,7 @@ export interface ClaimResult {
 }
 
 function service() {
+  // Service role is required: webhook idempotency claims update shared billing_events rows outside any end-user session.
   return createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,

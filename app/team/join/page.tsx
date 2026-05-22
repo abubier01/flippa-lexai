@@ -15,7 +15,7 @@ export default async function JoinTeamPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect(`/auth/login?next=/team/join?token=${token}`)
 
-  // Use service role to fetch invite (invitee is not yet a team member — RLS would block them)
+  // Service role is required: invite lookup must work before membership exists, and invite rows are not user-owned.
   const serviceSupabase = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
