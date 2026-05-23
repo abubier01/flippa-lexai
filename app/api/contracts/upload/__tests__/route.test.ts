@@ -267,6 +267,53 @@ describe('POST /api/contracts/upload — atomic quota RPC', () => {
     expect(body.error).toMatch(/failed to check quota/i)
   })
 
+  it('handles concurrent claims correctly with limit=1', async () => {
+    // Simulate a user near their limit: first claim succeeds, second is denied
+    // by the atomic Postgres function. We fire two requests "concurrently" via
+    // Promise.all; Vitest is single-threaded so this is sequential awaits with
+    // a call-counted mock, which is the realistic boundary test for the route.
+    getActivePlanMock.mockResolvedValue({ tier: 'free', status: 'active' })
+
+    let claimCallCount = 0
+    mockRpc.mockImplementation((fnName: string) => {
+      if (fnName === 'claim_monthly_contract') {
+        claimCallCount++
+        const allowed = claimCallCount === 1
+        return {
+          single: vi.fn().mockResolvedValue({
+            data: allowed ? { allowed: true, current_count: 1 } : { allowed: false, current_count: 5 },
+            error: null,
+          }),
+        }
+      }
+      if (fnName === 'release_monthly_contract') {
+        return {
+          then: (onFulfilled: () => void, onRejected: () => void) =>
+            Promise.resolve().then(onFulfilled, onRejected),
+        }
+      }
+      return { single: vi.fn().mockResolvedValue({ data: null, error: null }) }
+    })
+
+    const [resA, resB] = await Promise.all([
+      POST(buildPdfRequest('a.pdf')),
+      POST(buildPdfRequest('b.pdf')),
+    ])
+
+    const statuses = [resA.status, resB.status].sort()
+    expect(statuses).toEqual([200, 403])  // one succeeds, one is limited
+
+    const limited = resA.status === 403 ? resA : resB
+    const body = await limited.json()
+    expect(body.limitReached).toBe(true)
+
+    // The successful upload path doesn't release; only the limited path doesn't
+    // call release either (it never claimed). Net release calls = 0 for happy
+    // upload + denied claim.
+    expect(getReleaseCalls()).toBe(0)
+    expect(getClaimCalls()).toBe(2)
+  })
+
 })
 
 // ---------------------------------------------------------------------------
