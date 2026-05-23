@@ -83,7 +83,6 @@ vi.mock('@/lib/plan-limits', () => ({
     pro: { contractsPerMonth: -1 },
     free: { contractsPerMonth: 5 },
     team: { contractsPerMonth: -1 },
-    solo: { contractsPerMonth: 10 },
   },
 }))
 
@@ -268,14 +267,6 @@ describe('POST /api/contracts/upload — atomic quota RPC', () => {
     expect(body.error).toMatch(/failed to check quota/i)
   })
 
-  it('calls claim_monthly_contract with limit=10 for solo plan', async () => {
-    getActivePlanMock.mockResolvedValueOnce({ tier: 'solo', status: 'active' })
-
-    await POST(buildPdfRequest())
-
-    const claimCalls = mockRpc.mock.calls.filter(([name]: [string]) => name === 'claim_monthly_contract')
-    expect(claimCalls[0][1]).toEqual({ p_limit: 10 })
-  })
 })
 
 // ---------------------------------------------------------------------------

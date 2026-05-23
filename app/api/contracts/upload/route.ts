@@ -108,7 +108,12 @@ export async function POST(req: NextRequest) {
     release = async () => {
       if (claimReleased) return
       claimReleased = true
-      await supabase.rpc('release_monthly_contract').then(() => {}, () => {})
+      await supabase.rpc('release_monthly_contract').then(
+        () => {},
+        (err) => {
+          console.error('[upload] release_monthly_contract failed — quota may be leaked:', err)
+        }
+      )
     }
 
     let rawText = ''
