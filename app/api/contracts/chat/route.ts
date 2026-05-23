@@ -88,25 +88,27 @@ export async function POST(req: NextRequest) {
     const START = `<<<UNTRUSTED-CONTRACT-${requestId}-START>>>`
     const END = `<<<UNTRUSTED-CONTRACT-${requestId}-END>>>`
 
-    // Scrub any pre-existing sentinel-shaped content from untrusted inputs.
-    const rawContractText = (contract.raw_text || '').slice(0, 8000)
-      .replace(/<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')
+    // Shared scrub helper: strip any sentinel-shaped content from untrusted strings.
+    const SCRUB_REGEX = /<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-(START|END)>>>/gi
+    const scrub = (s: string) => s.replace(SCRUB_REGEX, '[REDACTED-SENTINEL]')
+
+    const rawContractText = scrub((contract.raw_text || '').slice(0, 8000))
 
     const contractContext = `
-Contract Title: ${contract.title}
-File: ${contract.file_name}
+Contract Title: ${scrub(contract.title)}
+File: ${scrub(contract.file_name)}
 Risk Score: ${contract.risk_score}/100
 
-${analysis ? `Summary: ${analysis.summary}
+${analysis ? `Summary: ${scrub(analysis.summary)}
 
 Key Points:
-${(analysis.key_points as string[]).map((p, i) => `${i + 1}. ${p}`).join('\n')}
+${(analysis.key_points as string[]).map((p, i) => `${i + 1}. ${scrub(p)}`).join('\n')}
 
 Identified Risks:
-${(analysis.risks as { title: string; severity: string; description: string }[]).map(r => `- [${r.severity.toUpperCase()}] ${r.title}: ${r.description}`).join('\n')}
+${(analysis.risks as { title: string; severity: string; description: string }[]).map(r => `- [${r.severity.toUpperCase()}] ${scrub(r.title)}: ${scrub(r.description)}`).join('\n')}
 
 Key Clauses:
-${Object.entries(analysis.clauses as Record<string, string>).map(([k, v]) => `- ${k.replace(/_/g, ' ')}: ${v}`).join('\n')}
+${Object.entries(analysis.clauses as Record<string, string>).map(([k, v]) => `- ${k.replace(/_/g, ' ')}: ${scrub(String(v))}`).join('\n')}
 ` : '(Analysis not yet complete)'}
 
 Contract Text:
@@ -116,12 +118,11 @@ ${END}
 `
 
     const historyMessages = (history || [])
-      .map(h => `User asked: ${h.content.replace(/<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')}`)
+      .map(h => `User asked: ${scrub(h.content)}`)
       .join('\n')
 
     // Scrub the current user message to prevent sentinel injection
-    const safeMessage = message
-      .replace(/<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')
+    const safeMessage = scrub(message)
 
     const prompt = `You are a highly knowledgeable contract law assistant. Answer the user's current question clearly and in plain English. The "previous questions" list is for context only — you have not previously responded to them in this conversation.
 
