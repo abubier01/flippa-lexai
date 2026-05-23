@@ -11,6 +11,7 @@ import { User, Lock, CreditCard, Loader2, Shield, Bell, Check, Zap } from 'lucid
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
 import { PRODUCTS } from '@/lib/products'
+import { DeleteAccountDialog } from '@/components/settings/delete-account-dialog'
 
 export default function SettingsPage() {
   const [user, setUser] = useState<SupabaseUser | null>(null)
@@ -349,7 +350,7 @@ export default function SettingsPage() {
             <p className="text-sm font-medium text-foreground">Delete account</p>
             <p className="text-xs text-muted-foreground mt-0.5">Permanently delete your account and all contract data</p>
           </div>
-          <Button variant="destructive" size="sm">Delete account</Button>
+          <DeleteAccountDialog />
         </div>
       </div>
     </div>
