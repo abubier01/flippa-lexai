@@ -124,6 +124,9 @@ export function createSupabaseMock(opts: SetupOptions = {}) {
     rpc: vi.fn().mockImplementation((name: string, args?: unknown) => {
       calls.rpc.push({ name, args })
       const queue = rpcQueues[name]
+      // FIFO consume for the configured array; once exhausted, reuse the last
+      // queued response (so a single-element queue acts like a constant). If you
+      // need strict over-call detection in a future test, switch to a custom mock.
       const next = queue?.shift() ?? queue?.[queue.length - 1] ?? { single: { data: null, error: null } }
       return {
         single: vi.fn().mockResolvedValue(next.single),
