@@ -100,14 +100,37 @@ describe('POST /api/stripe/webhook', () => {
     warn.mockRestore()
   })
 
-  it('200 deduped (and skips handler) when tryClaimEvent returns false', async () => {
+  it('200 deduped with reason already-processed when claim outcome is already-processed', async () => {
     constructEvent.mockReturnValue(buildCheckoutSessionCompleted())
-    tryClaimEvent.mockResolvedValue(false)
+    tryClaimEvent.mockResolvedValue({
+      kind: 'already-processed',
+      processedAt: '2026-05-23T12:00:00.000Z',
+    })
 
     const res = await POST(buildRequest('{}', 't=1,v1=ok'))
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ received: true, deduped: true })
+    expect(await res.json()).toEqual({
+      received: true,
+      deduped: true,
+      reason: 'already-processed',
+    })
+    expect(handleCheckoutSessionCompleted).not.toHaveBeenCalled()
+    expect(markEventProcessed).not.toHaveBeenCalled()
+  })
+
+  it('200 deduped with reason in-flight when claim outcome is in-flight', async () => {
+    constructEvent.mockReturnValue(buildCheckoutSessionCompleted())
+    tryClaimEvent.mockResolvedValue({ kind: 'in-flight' })
+
+    const res = await POST(buildRequest('{}', 't=1,v1=ok'))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      received: true,
+      deduped: true,
+      reason: 'in-flight',
+    })
     expect(handleCheckoutSessionCompleted).not.toHaveBeenCalled()
     expect(markEventProcessed).not.toHaveBeenCalled()
   })
@@ -115,7 +138,7 @@ describe('POST /api/stripe/webhook', () => {
   it('200 + handler invoked + markEventProcessed called on fresh checkout.session.completed', async () => {
     const evt = buildCheckoutSessionCompleted()
     constructEvent.mockReturnValue(evt)
-    tryClaimEvent.mockResolvedValue(true)
+    tryClaimEvent.mockResolvedValue({ kind: 'fresh' })
 
     const res = await POST(buildRequest('{}', 't=1,v1=ok'))
 
@@ -127,7 +150,7 @@ describe('POST /api/stripe/webhook', () => {
   })
 
   it('routes subscription.updated, subscription.deleted, invoice.payment_failed, invoice.payment_succeeded to their handlers', async () => {
-    tryClaimEvent.mockResolvedValue(true)
+    tryClaimEvent.mockResolvedValue({ kind: 'fresh' })
 
     constructEvent.mockReturnValueOnce(buildSubscriptionUpdated())
     await POST(buildRequest('{}', 't=1,v1=ok'))
@@ -150,7 +173,7 @@ describe('POST /api/stripe/webhook', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const evt = buildCheckoutSessionCompleted()
     constructEvent.mockReturnValue(evt)
-    tryClaimEvent.mockResolvedValue(true)
+    tryClaimEvent.mockResolvedValue({ kind: 'fresh' })
     handleCheckoutSessionCompleted.mockRejectedValueOnce(new Error('handler boom'))
 
     const res = await POST(buildRequest('{}', 't=1,v1=ok'))
@@ -164,7 +187,7 @@ describe('POST /api/stripe/webhook', () => {
   it('unknown event type is acknowledged with 200 (no handler invoked)', async () => {
     const evt = { ...buildCheckoutSessionCompleted(), type: 'customer.discount.created', data: { object: {} } } as any
     constructEvent.mockReturnValue(evt)
-    tryClaimEvent.mockResolvedValue(true)
+    tryClaimEvent.mockResolvedValue({ kind: 'fresh' })
 
     const res = await POST(buildRequest('{}', 't=1,v1=ok'))
 
@@ -189,7 +212,7 @@ describe('POST /api/stripe/webhook', () => {
   it('extractUserId returns null for non-checkout events; user_id passed to claim is null', async () => {
     const evt = buildSubscriptionUpdated()
     constructEvent.mockReturnValue(evt)
-    tryClaimEvent.mockResolvedValue(true)
+    tryClaimEvent.mockResolvedValue({ kind: 'fresh' })
 
     await POST(buildRequest('{}', 't=1,v1=ok'))
 
@@ -199,7 +222,7 @@ describe('POST /api/stripe/webhook', () => {
   it('extractUserId reads client_reference_id from checkout.session.completed events', async () => {
     const evt = buildCheckoutSessionCompleted({ data: { object: { client_reference_id: 'user-42' } } })
     constructEvent.mockReturnValue(evt)
-    tryClaimEvent.mockResolvedValue(true)
+    tryClaimEvent.mockResolvedValue({ kind: 'fresh' })
 
     await POST(buildRequest('{}', 't=1,v1=ok'))
 
@@ -209,7 +232,7 @@ describe('POST /api/stripe/webhook', () => {
   it('passes raw request body (text) to constructEvent — not parsed JSON', async () => {
     const raw = '{"id":"evt_raw","type":"checkout.session.completed"}'
     constructEvent.mockReturnValue(buildCheckoutSessionCompleted())
-    tryClaimEvent.mockResolvedValue(true)
+    tryClaimEvent.mockResolvedValue({ kind: 'fresh' })
 
     await POST(buildRequest(raw, 't=1,v1=ok'))
 

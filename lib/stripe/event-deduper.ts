@@ -1,22 +1,25 @@
 import 'server-only'
+import { log } from '@/lib/log'
 import { getServiceClient } from '@/lib/supabase/service-role'
+
+export type ClaimOutcome =
+  | { kind: 'fresh' }
+  | { kind: 'already-processed'; processedAt: string }
+  | { kind: 'in-flight' }
 
 /**
  * Attempt to claim a Stripe event for processing.
  *
  * Why: Stripe retries webhooks on non-2xx and on its own schedule. We must
  * make every handler idempotent. INSERT with a primary key on event_id is
- * the cheapest mutual-exclusion primitive — the second INSERT fails with
- * 23505 (unique violation), which we treat as "already processed."
- *
- * Returns true if this caller owns the event; false if it was already claimed.
+ * the cheapest mutual-exclusion primitive.
  */
 export async function tryClaimEvent(
   eventId: string,
   type: string,
   userId: string | null,
   payload: unknown,
-): Promise<boolean> {
+): Promise<ClaimOutcome> {
   const supabase = getServiceClient()
   const { error } = await supabase.from('billing_events').insert({
     event_id: eventId,
@@ -24,9 +27,22 @@ export async function tryClaimEvent(
     user_id: userId,
     payload,
   })
-  if (!error) return true
-  // 23505 = unique_violation in Postgres.
-  if (error.code === '23505') return false
+  if (!error) return { kind: 'fresh' }
+  if (error.code === '23505') {
+    const { data, error: readError } = await supabase
+      .from('billing_events')
+      .select('processed_at')
+      .eq('event_id', eventId)
+      .maybeSingle()
+    if (readError) {
+      throw new Error(`Failed to read existing event ${eventId}: ${readError.message}`)
+    }
+    const existing = data as { processed_at: string | null } | null
+    if (existing?.processed_at) {
+      return { kind: 'already-processed', processedAt: existing.processed_at }
+    }
+    return { kind: 'in-flight' }
+  }
   throw new Error(`Failed to claim event ${eventId}: ${error.message}`)
 }
 
@@ -48,12 +64,13 @@ export async function markEventProcessed(eventId: string): Promise<void> {
  */
 export async function releaseClaim(eventId: string): Promise<void> {
   const supabase = getServiceClient()
-  const { error } = await supabase
-    .from('billing_events')
-    .delete()
-    .eq('event_id', eventId)
+  const { error } = await supabase.from('billing_events').delete().eq('event_id', eventId)
   if (error) {
-    console.error('[event-deduper] releaseClaim failed:', eventId, error.message)
+    log.error('event-deduper.release-claim.failed', {
+      route: 'stripe.webhook',
+      eventId,
+      err: new Error(error.message),
+    })
     // Do not re-throw: the caller is already in a catch block and re-throwing
     // would mask the original handler error.
   }

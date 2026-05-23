@@ -18,22 +18,41 @@ beforeEach(() => {
 
 describe('event-deduper', () => {
   describe('tryClaimEvent', () => {
-    it('returns true on fresh event (insert succeeds)', async () => {
+    it('returns fresh on insert success', async () => {
       supabaseMock = createSupabaseMock({
         tables: { billing_events: { insert: { data: null, error: null } } },
       })
-      const claimed = await tryClaimEvent('evt_1', 'checkout.session.completed', 'user-1', { foo: 'bar' })
-      expect(claimed).toBe(true)
+      const outcome = await tryClaimEvent('evt_1', 'checkout.session.completed', 'user-1', { foo: 'bar' })
+      expect(outcome).toEqual({ kind: 'fresh' })
     })
 
-    it('returns false on PK conflict (23505)', async () => {
+    it('returns already-processed when PK conflict row has processed_at', async () => {
       supabaseMock = createSupabaseMock({
         tables: {
-          billing_events: { insert: { data: null, error: { code: '23505', message: 'unique_violation' } } },
+          billing_events: {
+            insert: { data: null, error: { code: '23505', message: 'unique_violation' } },
+            maybeSingle: { data: { processed_at: '2026-05-23T12:00:00.000Z' }, error: null },
+          },
         },
       })
-      const claimed = await tryClaimEvent('evt_1', 'checkout.session.completed', null, {})
-      expect(claimed).toBe(false)
+      const outcome = await tryClaimEvent('evt_1', 'checkout.session.completed', null, {})
+      expect(outcome).toEqual({
+        kind: 'already-processed',
+        processedAt: '2026-05-23T12:00:00.000Z',
+      })
+    })
+
+    it('returns in-flight when PK conflict row has null processed_at', async () => {
+      supabaseMock = createSupabaseMock({
+        tables: {
+          billing_events: {
+            insert: { data: null, error: { code: '23505', message: 'unique_violation' } },
+            maybeSingle: { data: { processed_at: null }, error: null },
+          },
+        },
+      })
+      const outcome = await tryClaimEvent('evt_1', 'checkout.session.completed', null, {})
+      expect(outcome).toEqual({ kind: 'in-flight' })
     })
 
     it('throws on non-unique-violation DB error', async () => {
@@ -54,6 +73,19 @@ describe('event-deduper', () => {
       expect(supabaseMock.calls.inserts.billing_events).toEqual([
         { event_id: 'evt_42', type: 'invoice.payment_failed', user_id: 'user-9', payload },
       ])
+    })
+
+    it('reads processed_at on 23505 to disambiguate outcome', async () => {
+      supabaseMock = createSupabaseMock({
+        tables: {
+          billing_events: {
+            insert: { data: null, error: { code: '23505', message: 'unique_violation' } },
+            maybeSingle: { data: { processed_at: null }, error: null },
+          },
+        },
+      })
+      await tryClaimEvent('evt_1', 'checkout.session.completed', null, {})
+      expect(supabaseMock.calls.fromByTable.billing_events).toBe(2)
     })
 
     it('accepts null user_id', async () => {
@@ -101,11 +133,11 @@ describe('event-deduper', () => {
         tables: { billing_events: { delete: { data: null, error: { message: 'gone' } } } },
       })
       await expect(releaseClaim('evt_1')).resolves.toBeUndefined()
-      expect(consoleErr).toHaveBeenCalledWith(
-        expect.stringContaining('releaseClaim failed'),
-        'evt_1',
-        'gone',
-      )
+      const payload = JSON.parse(consoleErr.mock.calls[0][0] as string)
+      expect(payload.msg).toBe('event-deduper.release-claim.failed')
+      expect(payload.eventId).toBe('evt_1')
+      expect(payload.route).toBe('stripe.webhook')
+      expect(payload.err.message).toBe('gone')
       consoleErr.mockRestore()
     })
   })

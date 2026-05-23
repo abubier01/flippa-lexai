@@ -7,9 +7,12 @@ import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/
 import { ANALYZE_TRUNCATION_CHARS } from '@/lib/llm/limits'
 import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 import { AnalysisSchema } from '@/lib/llm/schemas'
+import { logger } from '@/lib/log/request'
 
 export async function POST(req: NextRequest) {
   let contractId: string | undefined
+  let userId: string | undefined
+  const rlog = logger(req, 'contracts.analyze')
   try {
     const groqApiKey = process.env.GROQ_API_KEY?.trim()
     if (!groqApiKey) {
@@ -20,6 +23,8 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    userId = user.id
+    const ulog = rlog.child({ userId })
 
     const ip = getClientIp(req)
     const limitResult = consumeRateLimit({
@@ -115,7 +120,10 @@ Respond with ONLY a valid JSON object matching this exact schema (no prose, no m
 
     const result = AnalysisSchema.safeParse(parsed)
     if (!result.success) {
-      console.error('[analyze] schema validation failed:', result.error.flatten())
+      ulog.error('analyze.schema.invalid', {
+        contractId,
+        issues: result.error.flatten(),
+      })
       throw new Error('AI returned data in an unexpected shape')
     }
     const analysis = result.data
@@ -149,7 +157,7 @@ Respond with ONLY a valid JSON object matching this exact schema (no prose, no m
 
     return NextResponse.json({ success: true })
   } catch (err) {
-    console.error('Analysis error:', err)
+    rlog.error('analyze.failed', { err, contractId, ...(userId ? { userId } : {}) })
     if (contractId) {
       try {
         const supabase = await createClient()

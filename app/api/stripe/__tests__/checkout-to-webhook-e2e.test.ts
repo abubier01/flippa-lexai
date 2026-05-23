@@ -233,6 +233,10 @@ describe('E2E: checkout → webhook → plan update', () => {
             data: null,
             error: { code: '23505', message: 'unique_violation' },
           },
+          maybeSingle: {
+            data: { processed_at: '2026-05-23T12:00:00.000Z' },
+            error: null,
+          },
         },
         profiles: {
           single: { data: { id: 'user-1', stripe_customer_id: null }, error: null },
@@ -246,7 +250,11 @@ describe('E2E: checkout → webhook → plan update', () => {
 
     const second = await webhookPOST(webhookReq())
     expect(second.status).toBe(200)
-    expect(await second.json()).toEqual({ received: true, deduped: true })
+    expect(await second.json()).toEqual({
+      received: true,
+      deduped: true,
+      reason: 'already-processed',
+    })
 
     // No upsert on the freshly-swapped mock
     expect(serviceSupabase.calls.upserts.subscriptions ?? []).toEqual([])

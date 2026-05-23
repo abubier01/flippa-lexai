@@ -4,6 +4,7 @@ import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
 import { ANALYZE_TRUNCATION_CHARS } from '@/lib/llm/limits'
+import { logger } from '@/lib/log/request'
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024   // 10 MB — matches client validation
 const MAX_TEXT_CHARS = 50_000              // ~50 KB raw text, ~12 pages of contract
@@ -22,6 +23,8 @@ async function extractTextFromDOCX(buffer: Buffer): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
+  const rlog = logger(req, 'contracts.upload')
+  let userId: string | undefined
   // release() is hoisted so the outer catch block can call it even if the
   // claim succeeded but the DB insert (or any subsequent step) threw.
   // Before the claim is made, release() is a no-op.
@@ -31,6 +34,8 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    userId = user.id
+    const ulog = rlog.child({ userId })
 
     const ip = getClientIp(req)
     const limitResult = consumeRateLimit({
@@ -91,7 +96,7 @@ export async function POST(req: NextRequest) {
       .single<{ allowed: boolean; current_count: number }>()
 
     if (claimError) {
-      console.error('[upload] claim error:', claimError.message)
+      ulog.error('upload.claim.failed', { err: new Error(claimError.message) })
       return NextResponse.json({ error: 'Failed to check quota' }, { status: 500 })
     }
 
@@ -112,7 +117,9 @@ export async function POST(req: NextRequest) {
       await supabase.rpc('release_monthly_contract').then(
         () => {},
         (err) => {
-          console.error('[upload] release_monthly_contract failed — quota may be leaked:', err)
+          ulog.error('upload.claim.release.failed', {
+            err: err instanceof Error ? err : new Error(String(err)),
+          })
         }
       )
     }
@@ -135,7 +142,7 @@ export async function POST(req: NextRequest) {
         try {
           rawText = await extractTextFromPDF(buffer)
         } catch (err) {
-          console.error('PDF parsing error:', err)
+          ulog.error('upload.pdf-parse.failed', { err })
           await release()
           return NextResponse.json({
             error: 'Could not read this PDF. It may be corrupted or password-protected.',
@@ -156,7 +163,7 @@ export async function POST(req: NextRequest) {
         try {
           rawText = await extractTextFromDOCX(buffer)
         } catch (err) {
-          console.error('DOCX parsing error:', err)
+          ulog.error('upload.docx-parse.failed', { err })
           await release()
           return NextResponse.json({
             error: 'Could not read this DOCX file. It may be corrupted.',
@@ -205,7 +212,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ id: contract.id }, { headers })
   } catch (err) {
-    console.error('Upload error:', err)
+    rlog.error('upload.failed', { err, ...(userId ? { userId } : {}) })
     await release()
     return NextResponse.json({ error: 'Failed to upload contract' }, { status: 500 })
   }

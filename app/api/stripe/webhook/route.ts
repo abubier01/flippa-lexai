@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import type Stripe from 'stripe'
+import { logger } from '@/lib/log/request'
 import { getStripe } from '@/lib/stripe'
 import { tryClaimEvent, markEventProcessed, releaseClaim } from '@/lib/stripe/event-deduper'
 import { handleCheckoutSessionCompleted } from '@/lib/stripe/handlers/checkout-session-completed'
@@ -17,13 +18,14 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
+  const rlog = logger(req, 'stripe.webhook')
   const sig = req.headers.get('stripe-signature')
   if (!sig) {
     return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
   }
   const secret = process.env.STRIPE_WEBHOOK_SECRET
   if (!secret) {
-    console.error('[stripe-webhook] STRIPE_WEBHOOK_SECRET is not set')
+    rlog.error('stripe-webhook.misconfigured')
     return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
   }
 
@@ -33,24 +35,35 @@ export async function POST(req: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(body, sig, secret)
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'invalid signature'
-    console.warn('[stripe-webhook] signature verification failed:', message)
+    rlog.warn('stripe-webhook.signature.failed', { err })
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
   const userId = extractUserId(event)
-  let claimed: boolean
+  const wlog = rlog.child({
+    eventId: event.id,
+    eventType: event.type,
+    ...(userId ? { userId } : {}),
+  })
+  let outcome: Awaited<ReturnType<typeof tryClaimEvent>>
   try {
-    claimed = await tryClaimEvent(event.id, event.type, userId, event as unknown)
+    outcome = await tryClaimEvent(event.id, event.type, userId, event as unknown)
   } catch (err) {
-    console.error('[stripe-webhook] claim failed:', event.id, err)
+    wlog.error('dedup.claim.failed', { err })
     return NextResponse.json({ error: 'Claim failed' }, { status: 500 })
   }
-  if (!claimed) {
-    // Already processed (or in-flight). 200 so Stripe stops retrying.
-    return NextResponse.json({ received: true, deduped: true })
+  switch (outcome.kind) {
+    case 'already-processed':
+      wlog.info('dedup: already processed', { processedAt: outcome.processedAt })
+      return NextResponse.json({ received: true, deduped: true, reason: 'already-processed' })
+    case 'in-flight':
+      wlog.warn('dedup: claim contended — another worker still processing')
+      return NextResponse.json({ received: true, deduped: true, reason: 'in-flight' })
+    case 'fresh':
+      break
   }
 
+  wlog.info('handler.dispatch')
   try {
     switch (event.type) {
       case 'checkout.session.completed':
@@ -74,10 +87,10 @@ export async function POST(req: NextRequest) {
         break
     }
     await markEventProcessed(event.id)
+    wlog.info('handler.ok')
     return NextResponse.json({ received: true })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'handler failed'
-    console.error('[stripe-webhook] handler error:', event.id, event.type, message)
+    wlog.error('handler.failed', { err })
     // Returning 500 makes Stripe retry. The dedup row remains with
     // processed_at = NULL; the retry will see claim=false but the event still
     // needs to run. Adjust strategy: delete the dedup row on handler failure
@@ -86,6 +99,7 @@ export async function POST(req: NextRequest) {
     // (claim returns false, route returns 200 deduped). DB-down + handler-fail is
     // a chain-of-failures; surface via the deduper's internal logging.
     await releaseClaim(event.id)
+    wlog.info('claim.released')
     return NextResponse.json({ error: 'Handler failed' }, { status: 500 })
   }
 }

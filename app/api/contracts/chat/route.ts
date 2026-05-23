@@ -6,8 +6,11 @@ import { generateText } from 'ai'
 import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { logger } from '@/lib/log/request'
 
 export async function POST(req: NextRequest) {
+  let userId: string | undefined
+  const rlog = logger(req, 'contracts.chat')
   try {
     const groqApiKey = process.env.GROQ_API_KEY?.trim()
     if (!groqApiKey) {
@@ -18,6 +21,7 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    userId = user.id
 
     const ip = getClientIp(req)
     const limitResult = consumeRateLimit({
@@ -169,7 +173,7 @@ Assistant:`
 
     return NextResponse.json({ reply })
   } catch (err) {
-    console.error('Chat error:', err)
+    rlog.error('chat.failed', { err, ...(userId ? { userId } : {}) })
     return NextResponse.json({ error: 'Failed to generate response' }, { status: 500 })
   }
 }
