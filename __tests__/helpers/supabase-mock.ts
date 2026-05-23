@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 
-type Result<T = unknown> = { data: T | null; error: { code?: string; message: string } | null }
+type Result<T = unknown> = { data: T | null; error: { code?: string; message: string } | null; count?: number | null }
 
 type TerminalConfig = {
   single?: Result

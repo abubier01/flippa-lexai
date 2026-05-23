@@ -5,38 +5,55 @@ import { Upload, FileText, AlertTriangle, CheckCircle, ArrowRight, TrendingUp, Z
 import { formatDistanceToNow } from 'date-fns'
 import RiskBadge from '@/components/contracts/risk-badge'
 import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
-import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
+
+interface ContractRiskScoreRow {
+  contract_id: string
+  risk_score: number | null
+  status: string
+  computed_risk_score: number | null
+}
+
+interface ContractScoreSummary {
+  total: number
+  completed_count: number
+  high_risk_count: number
+  avg_risk_score: number
+  bucket_0_20: number
+  bucket_21_40: number
+  bucket_41_60: number
+  bucket_61_80: number
+  bucket_81_100: number
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const [contractsRes, allContractsRes, profileRes, analysesRes] = await Promise.all([
+  // The scores RPC is still needed to populate the per-contract <RiskBadge>
+  // Map for the recent-contracts list below. The summary RPC supplies the
+  // stat values (scalars + buckets) so we don't recompute them in JS.
+  const [contractsRes, scoresRes, summaryRes, profileRes] = await Promise.all([
     supabase
       .from('contracts')
       .select('*')
       .eq('user_id', user!.id)
       .order('created_at', { ascending: false })
       .limit(5),
-    supabase
-      .from('contracts')
-      .select('id, risk_score, status')
-      .eq('user_id', user!.id),
+    supabase.rpc('get_user_contract_risk_scores'),
+    supabase.rpc('get_user_contract_score_summary'),
     supabase
       .from('profiles')
       .select('plan, contracts_this_month, usage_reset_at')
       .eq('id', user!.id)
       .single(),
-    supabase
-      .from('contract_analyses')
-      .select('contract_id, risks')
-      .eq('user_id', user!.id),
   ])
 
   const contracts = contractsRes.data
-  const allContracts = allContractsRes.data
+  const scoreRows: ContractRiskScoreRow[] = (scoresRes.data as ContractRiskScoreRow[] | null) ?? []
+  // PostgREST returns RETURNS TABLE(...) results as an array even for a
+  // single-row function — unwrap the first element.
+  const [summary] = (summaryRes.data as ContractScoreSummary[] | null) ?? []
   const profile = profileRes.data
-  const analyses = analysesRes.data
 
   const plan = (profile?.plan || 'free') as PlanType
   const limits = PLAN_LIMITS[plan]
@@ -45,31 +62,28 @@ export default async function DashboardPage() {
 
   // Check if we need to reset (for display purposes)
   const now = new Date()
-  const monthsSinceReset = (now.getFullYear() - usageResetAt.getFullYear()) * 12 + 
+  const monthsSinceReset = (now.getFullYear() - usageResetAt.getFullYear()) * 12 +
                            (now.getMonth() - usageResetAt.getMonth())
   if (monthsSinceReset >= 1) {
     contractsThisMonth = 0
   }
 
-  // Build contract_id -> effective risk score from risk items
-  const analysisRiskMap: Record<string, number> = {}
-  analyses?.forEach(a => {
-    const risks = a.risks as { severity: string }[] || []
-    if (a.contract_id && risks.length > 0) {
-      analysisRiskMap[a.contract_id] = computeRiskScoreFromRisks(risks)
+  // Build contract_id -> computed risk score from RPC result (badge lookup).
+  const analysisRiskMap = new Map<string, number>()
+  for (const row of scoreRows) {
+    if (row.computed_risk_score !== null) {
+      analysisRiskMap.set(row.contract_id, row.computed_risk_score)
     }
-  })
+  }
 
   const effectiveScore = (id: string, storedScore: number | null) =>
-    analysisRiskMap[id] ?? storedScore ?? 0
+    analysisRiskMap.get(id) ?? storedScore ?? 0
 
-  const total = allContracts?.length ?? 0
-  const completedContracts = allContracts?.filter(c => c.status === 'completed') ?? []
-  const completed = completedContracts.length
-  const highRisk = completedContracts.filter(c => effectiveScore(c.id, c.risk_score) >= 70).length
-  const avgRisk = completed > 0
-    ? Math.round(completedContracts.reduce((sum, c) => sum + effectiveScore(c.id, c.risk_score), 0) / completed)
-    : 0
+  // Stat scalars come straight from the summary RPC — no JS aggregation.
+  const total = summary?.total ?? 0
+  const completed = summary?.completed_count ?? 0
+  const highRisk = summary?.high_risk_count ?? 0
+  const avgRisk = summary?.avg_risk_score ?? 0
 
   const stats = [
     { label: 'Total Contracts', value: total, icon: FileText, color: 'text-primary', bg: 'bg-accent' },

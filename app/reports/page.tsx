@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 import dynamic from 'next/dynamic'
 
 const ReportsCharts = dynamic(() => import('@/components/reports/reports-charts'), {
@@ -12,129 +11,84 @@ const ReportsCharts = dynamic(() => import('@/components/reports/reports-charts'
   ),
 })
 
-interface ContractRow {
-  id: string
-  risk_score: number | null
-  status: string
-  created_at: string
+interface RiskDistributionRow {
+  severity: 'high' | 'medium' | 'low'
+  count: number
 }
 
-interface AnalysisRow {
-  contract_id: string | null
-  risks: unknown
+interface MonthlyContractRow {
+  month: string
+  count: number
 }
 
-interface RiskItem {
-  severity: string
+interface ContractScoreSummary {
+  total: number
+  completed_count: number
+  high_risk_count: number
+  avg_risk_score: number
+  bucket_0_20: number
+  bucket_21_40: number
+  bucket_41_60: number
+  bucket_61_80: number
+  bucket_81_100: number
 }
 
 export default async function ReportsPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
 
-  // Fetch data in parallel
-  const contractsPromise = supabase
-    .from('contracts')
-    .select('id, risk_score, status, created_at')
-    .eq('user_id', user!.id)
-    .order('created_at', { ascending: true })
+  const [distRes, monthlyRes, summaryRes] = await Promise.all([
+    supabase.rpc('get_user_risk_distribution'),
+    supabase.rpc('get_user_monthly_contracts'),
+    supabase.rpc('get_user_contract_score_summary'),
+  ])
 
-  const analysesPromise = supabase
-    .from('contract_analyses')
-    .select('contract_id, risks')
-    .eq('user_id', user!.id)
+  const distRows: RiskDistributionRow[] = (distRes.data as RiskDistributionRow[] | null) ?? []
+  const monthlyRows: MonthlyContractRow[] = (monthlyRes.data as MonthlyContractRow[] | null) ?? []
+  // PostgREST returns RETURNS TABLE(...) results as an array even when the
+  // function only ever yields one row — unwrap the first element.
+  const [summary] = (summaryRes.data as ContractScoreSummary[] | null) ?? []
 
-  const [contractsResult, analysesResult] = await Promise.all([contractsPromise, analysesPromise])
-
-  const allContracts: ContractRow[] = contractsResult.data ?? []
-  const allAnalyses: AnalysisRow[] = analysesResult.data ?? []
-
-  // Filter completed contracts first
-  const doneContracts: ContractRow[] = []
-  for (const c of allContracts) {
-    if (c.status === 'completed') {
-      doneContracts.push(c)
+  // Risk severity distribution — RPC is sparse; default missing buckets to 0.
+  const severityCounts: Record<'high' | 'medium' | 'low', number> = {
+    high: 0,
+    medium: 0,
+    low: 0,
+  }
+  for (const row of distRows) {
+    if (row.severity === 'high' || row.severity === 'medium' || row.severity === 'low') {
+      severityCounts[row.severity] = Number(row.count) || 0
     }
   }
-
-  // Build risk map from analyses
-  const riskMap: Record<string, number> = {}
-  let highCount = 0
-  let medCount = 0
-  let lowCount = 0
-
-  for (const a of allAnalyses) {
-    if (!a.contract_id) continue
-    const risks = (a.risks as RiskItem[]) ?? []
-    for (const r of risks) {
-      if (r.severity === 'high') highCount++
-      else if (r.severity === 'medium') medCount++
-      else lowCount++
-    }
-    if (risks.length > 0) {
-      riskMap[a.contract_id] = computeRiskScoreFromRisks(risks)
-    }
-  }
-
-  // Helper to get effective score
-  function getScore(c: ContractRow): number {
-    return riskMap[c.id] ?? c.risk_score ?? 0
-  }
-
-  // Compute stats
-  const total = allContracts.length
-  const completedCount = doneContracts.length
-
-  let riskSum = 0
-  for (const c of doneContracts) {
-    riskSum += getScore(c)
-  }
-  const avgRisk = completedCount > 0 ? Math.round(riskSum / completedCount) : 0
-
-  let highRiskCount = 0
-  for (const c of doneContracts) {
-    if (getScore(c) >= 70) highRiskCount++
-  }
-
-  // Monthly data
-  const monthlyMap: Record<string, number> = {}
-  for (const c of allContracts) {
-    const month = new Date(c.created_at).toLocaleDateString('en-US', {
-      month: 'short',
-      year: '2-digit',
-    })
-    monthlyMap[month] = (monthlyMap[month] ?? 0) + 1
-  }
-  const monthlyData = Object.entries(monthlyMap).map(([month, count]) => ({ month, count }))
-
-  // Risk score buckets
-  let bucket0 = 0
-  let bucket1 = 0
-  let bucket2 = 0
-  let bucket3 = 0
-  let bucket4 = 0
-
-  for (const c of doneContracts) {
-    const s = getScore(c)
-    if (s <= 20) bucket0++
-    else if (s <= 40) bucket1++
-    else if (s <= 60) bucket2++
-    else if (s <= 80) bucket3++
-    else bucket4++
-  }
-
-  const riskBuckets = [
-    { range: '0-20', count: bucket0 },
-    { range: '21-40', count: bucket1 },
-    { range: '41-60', count: bucket2 },
-    { range: '61-80', count: bucket3 },
-    { range: '81-100', count: bucket4 },
-  ]
 
   const riskDistribution = [
-    { name: 'High', value: highCount, fill: 'var(--color-chart-4)' },
-    { name: 'Medium', value: medCount, fill: 'var(--color-chart-3)' },
-    { name: 'Low', value: lowCount, fill: 'var(--color-chart-2)' },
+    { name: 'High', value: severityCounts.high, fill: 'var(--color-chart-4)' },
+    { name: 'Medium', value: severityCounts.medium, fill: 'var(--color-chart-3)' },
+    { name: 'Low', value: severityCounts.low, fill: 'var(--color-chart-2)' },
+  ]
+
+  // Monthly data — trailing 12 months only (RPC-enforced window); sparse.
+  // Older history is intentionally excluded for chart readability.
+  const monthlyData = monthlyRows.map(row => ({
+    month: new Date(row.month).toLocaleDateString('en-US', {
+      month: 'short',
+      year: '2-digit',
+    }),
+    count: Number(row.count) || 0,
+  }))
+
+  // Single-row roll-up RPC — defaults to zero when the user has no contracts
+  // (function still returns one row from the empty aggregate).
+  const total = summary?.total ?? 0
+  const completedCount = summary?.completed_count ?? 0
+  const highRiskCount = summary?.high_risk_count ?? 0
+  const avgRisk = summary?.avg_risk_score ?? 0
+
+  const riskBuckets = [
+    { range: '0-20',   count: summary?.bucket_0_20 ?? 0 },
+    { range: '21-40',  count: summary?.bucket_21_40 ?? 0 },
+    { range: '41-60',  count: summary?.bucket_41_60 ?? 0 },
+    { range: '61-80',  count: summary?.bucket_61_80 ?? 0 },
+    { range: '81-100', count: summary?.bucket_81_100 ?? 0 },
   ]
 
   return (
