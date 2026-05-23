@@ -5,6 +5,7 @@ import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
 import { ANALYZE_TRUNCATION_CHARS } from '@/lib/llm/limits'
 import { logger } from '@/lib/log/request'
+import { withQuotaClaim } from '@/lib/quota'
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024   // 10 MB — matches client validation
 const MAX_TEXT_CHARS = 50_000              // ~50 KB raw text, ~12 pages of contract
@@ -25,10 +26,6 @@ async function extractTextFromDOCX(buffer: Buffer): Promise<string> {
 export async function POST(req: NextRequest) {
   const rlog = logger(req, 'contracts.upload')
   let userId: string | undefined
-  // release() is hoisted so the outer catch block can call it even if the
-  // claim succeeded but the DB insert (or any subsequent step) threw.
-  // Before the claim is made, release() is a no-op.
-  let release: () => Promise<void> = async () => {}
 
   try {
     const supabase = await createClient()
@@ -89,131 +86,141 @@ export async function POST(req: NextRequest) {
     const plan = active.tier
     const limits = PLAN_LIMITS[plan]
 
-    const { data: claim, error: claimError } = await supabase
-      .rpc('claim_monthly_contract', {
-        p_limit: limits.contractsPerMonth,
-      })
-      .single<{ allowed: boolean; current_count: number }>()
+    type UploadResult =
+      | { status: 422; error: string }
+      | { id: string; truncated: boolean }
 
-    if (claimError) {
-      ulog.error('upload.claim.failed', { err: new Error(claimError.message) })
-      return NextResponse.json({ error: 'Failed to check quota' }, { status: 500 })
-    }
+    const claimResult = await withQuotaClaim<UploadResult>(
+      supabase,
+      limits.contractsPerMonth,
+      async () => {
+        let rawText = ''
+        let actualFileName = ''
+        let fileSize = 0
 
-    if (!claim?.allowed) {
+        if (file) {
+          actualFileName = file.name
+          fileSize = file.size
+          const fileNameLower = file.name.toLowerCase()
+
+          if (file.type === 'text/plain' || fileNameLower.endsWith('.txt')) {
+            // Plain text files - read directly
+            rawText = await file.text()
+          } else if (file.type === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
+            // PDF files - extract text using pdf-parse
+            const buffer = Buffer.from(await file.arrayBuffer())
+            try {
+              rawText = await extractTextFromPDF(buffer)
+            } catch (err) {
+              ulog.error('upload.pdf-parse.failed', { err })
+              return {
+                ok: false,
+                value: {
+                  status: 422 as const,
+                  error: 'Could not read this PDF. It may be corrupted or password-protected.',
+                },
+              }
+            }
+            if (!rawText.trim()) {
+              return {
+                ok: false,
+                value: {
+                  status: 422 as const,
+                  error: 'This PDF appears to be image-based or scanned. Please paste the text directly, or upload a text-based PDF.',
+                },
+              }
+            }
+          } else if (
+            file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            fileNameLower.endsWith('.docx')
+          ) {
+            // DOCX files - extract text using mammoth
+            const buffer = Buffer.from(await file.arrayBuffer())
+            try {
+              rawText = await extractTextFromDOCX(buffer)
+            } catch (err) {
+              ulog.error('upload.docx-parse.failed', { err })
+              return {
+                ok: false,
+                value: {
+                  status: 422 as const,
+                  error: 'Could not read this DOCX file. It may be corrupted.',
+                },
+              }
+            }
+            if (!rawText.trim()) {
+              return {
+                ok: false,
+                value: {
+                  status: 422 as const,
+                  error: 'This DOCX appears to have no extractable text. Please paste the text directly.',
+                },
+              }
+            }
+          } else if (fileNameLower.endsWith('.doc')) {
+            // Legacy .doc files - not supported by mammoth, return message
+            rawText = `[Legacy DOC file uploaded: ${file.name}]\n\nNote: Legacy .doc format is not fully supported. Please convert to .docx or paste the text directly for best results.`
+          } else {
+            // Unknown format
+            rawText = `[File uploaded: ${file.name}]\n\nThis file type is not fully supported. Please upload PDF, DOCX, or TXT files, or paste the contract text directly.`
+          }
+        } else {
+          // text is guaranteed non-null here (the !file && !text guard above returned early)
+          rawText = text!
+          actualFileName = fileName || 'pasted-text.txt'
+          fileSize = new Blob([text!]).size
+        }
+
+        // Insert contract record
+        const { data: contract, error } = await supabase
+          .from('contracts')
+          .insert({
+            user_id: user.id,
+            title,
+            file_name: actualFileName,
+            file_size: fileSize,
+            raw_text: rawText,
+            status: 'pending',
+            risk_score: 0,
+          })
+          .select()
+          .single()
+
+        if (error) throw error
+
+        return {
+          ok: true,
+          value: {
+            id: contract.id,
+            truncated: rawText.length > ANALYZE_TRUNCATION_CHARS,
+          },
+        }
+      },
+    )
+
+    if (claimResult.kind === 'denied') {
       return NextResponse.json({
         error: `You've reached your monthly limit of ${limits.contractsPerMonth} contract analyses. Upgrade to Pro for unlimited analyses.`,
         limitReached: true,
         plan,
       }, { status: 403 })
     }
-
-    // From here on, ANY failure path must release the claim.
-    // Wire up the outer release() so the catch block can also call it.
-    let claimReleased = false
-    release = async () => {
-      if (claimReleased) return
-      claimReleased = true
-      await supabase.rpc('release_monthly_contract').then(
-        () => {},
-        (err) => {
-          ulog.error('upload.claim.release.failed', {
-            err: err instanceof Error ? err : new Error(String(err)),
-          })
-        }
-      )
+    if (claimResult.kind === 'claim_error') {
+      ulog.error('upload.claim.failed', { err: new Error(claimResult.error) })
+      return NextResponse.json({ error: 'Failed to check quota' }, { status: 500 })
     }
 
-    let rawText = ''
-    let actualFileName = ''
-    let fileSize = 0
-
-    if (file) {
-      actualFileName = file.name
-      fileSize = file.size
-      const fileNameLower = file.name.toLowerCase()
-
-      if (file.type === 'text/plain' || fileNameLower.endsWith('.txt')) {
-        // Plain text files - read directly
-        rawText = await file.text()
-      } else if (file.type === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
-        // PDF files - extract text using pdf-parse
-        const buffer = Buffer.from(await file.arrayBuffer())
-        try {
-          rawText = await extractTextFromPDF(buffer)
-        } catch (err) {
-          ulog.error('upload.pdf-parse.failed', { err })
-          await release()
-          return NextResponse.json({
-            error: 'Could not read this PDF. It may be corrupted or password-protected.',
-          }, { status: 422 })
-        }
-        if (!rawText.trim()) {
-          await release()
-          return NextResponse.json({
-            error: 'This PDF appears to be image-based or scanned. Please paste the text directly, or upload a text-based PDF.',
-          }, { status: 422 })
-        }
-      } else if (
-        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-        fileNameLower.endsWith('.docx')
-      ) {
-        // DOCX files - extract text using mammoth
-        const buffer = Buffer.from(await file.arrayBuffer())
-        try {
-          rawText = await extractTextFromDOCX(buffer)
-        } catch (err) {
-          ulog.error('upload.docx-parse.failed', { err })
-          await release()
-          return NextResponse.json({
-            error: 'Could not read this DOCX file. It may be corrupted.',
-          }, { status: 422 })
-        }
-        if (!rawText.trim()) {
-          await release()
-          return NextResponse.json({
-            error: 'This DOCX appears to have no extractable text. Please paste the text directly.',
-          }, { status: 422 })
-        }
-      } else if (fileNameLower.endsWith('.doc')) {
-        // Legacy .doc files - not supported by mammoth, return message
-        rawText = `[Legacy DOC file uploaded: ${file.name}]\n\nNote: Legacy .doc format is not fully supported. Please convert to .docx or paste the text directly for best results.`
-      } else {
-        // Unknown format
-        rawText = `[File uploaded: ${file.name}]\n\nThis file type is not fully supported. Please upload PDF, DOCX, or TXT files, or paste the contract text directly.`
-      }
-    } else {
-      // text is guaranteed non-null here (the !file && !text guard above returned early)
-      rawText = text!
-      actualFileName = fileName || 'pasted-text.txt'
-      fileSize = new Blob([text!]).size
+    const out = claimResult.result
+    if ('status' in out) {
+      return NextResponse.json({ error: out.error }, { status: 422 })
     }
 
-    // Insert contract record
-    const { data: contract, error } = await supabase
-      .from('contracts')
-      .insert({
-        user_id: user.id,
-        title,
-        file_name: actualFileName,
-        file_size: fileSize,
-        raw_text: rawText,
-        status: 'pending',
-        risk_score: 0,
-      })
-      .select()
-      .single()
-
-    if (error) throw error
-
-    const headers: Record<string, string> = {}
-    if (rawText.length > ANALYZE_TRUNCATION_CHARS) {
-      headers['X-Lexai-Truncated'] = 'analysis-window-exceeded'
-    }
-    return NextResponse.json({ id: contract.id }, { headers })
+    const headers: Record<string, string> = out.truncated
+      ? { 'X-Lexai-Truncated': 'analysis-window-exceeded' }
+      : {}
+    return NextResponse.json({ id: out.id }, { headers })
   } catch (err) {
     rlog.error('upload.failed', { err, ...(userId ? { userId } : {}) })
-    await release()
     return NextResponse.json({ error: 'Failed to upload contract' }, { status: 500 })
   }
 }
