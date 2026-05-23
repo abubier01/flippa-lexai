@@ -17,6 +17,7 @@ node_modules
 .next/
 .DS_Store
 *.tsbuildinfo
+/coverage/
 
 # Local tooling artifacts
 .claude/
