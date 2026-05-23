@@ -91,4 +91,31 @@ describe('POST /api/admin/setup-teams-v2', () => {
     expect(Array.isArray(body.steps)).toBe(true)
     expect(mockRequireAdminAccess).toHaveBeenCalledOnce()
   })
+
+  it('returns 500 when POSTGRES_URL_NON_POOLING is missing', async () => {
+    mockRequireAdminAccess.mockResolvedValue(null)
+    vi.stubEnv('POSTGRES_URL_NON_POOLING', '')
+
+    const request = new Request('http://localhost/api/admin/setup-teams-v2', { method: 'POST' })
+    const response = await POST(request)
+
+    expect(response.status).toBe(500)
+    const body = await response.json()
+    expect(body.error).toMatch(/POSTGRES_URL_NON_POOLING/)
+  })
+
+  it('records ok:false in steps when a DDL query throws', async () => {
+    mockRequireAdminAccess.mockResolvedValue(null)
+    mockQuery.mockRejectedValue(new Error('DDL failed'))
+
+    const request = new Request('http://localhost/api/admin/setup-teams-v2', { method: 'POST' })
+    const response = await POST(request)
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(Array.isArray(body.steps)).toBe(true)
+    const failedStep = body.steps.find((s: { ok: boolean; error?: string }) => s.ok === false)
+    expect(failedStep).toBeDefined()
+    expect(typeof failedStep.error).toBe('string')
+  })
 })

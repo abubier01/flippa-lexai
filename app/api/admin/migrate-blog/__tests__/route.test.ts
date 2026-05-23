@@ -72,4 +72,63 @@ describe('POST /api/admin/migrate-blog', () => {
     expect(typeof body.tableExists).toBe('boolean')
     expect(mockRequireAdminAccess).toHaveBeenCalledOnce()
   })
+
+  it('falls back to management API when exec_sql RPC returns !ok', async () => {
+    mockRequireAdminAccess.mockResolvedValue(null)
+
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/rest/v1/rpc/exec_sql')) {
+        return Promise.resolve({ ok: false, json: () => Promise.resolve({}) })
+      }
+      if (url.includes('api.supabase.com')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    })
+
+    const request = new Request('http://localhost/api/admin/migrate-blog', { method: 'POST' })
+    const response = await POST(request)
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(Array.isArray(body.results)).toBe(true)
+    expect(body.results.every((r: string) => typeof r === 'string')).toBe(true)
+    expect(body.results.some((r: string) => r === 'OK via mgmt API')).toBe(true)
+  })
+
+  it('records "Error" result when mgmt API also returns !ok', async () => {
+    mockRequireAdminAccess.mockResolvedValue(null)
+
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/rest/v1/rpc/exec_sql')) {
+        return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'forbidden' }) })
+      }
+      if (url.includes('api.supabase.com')) {
+        return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'forbidden' }) })
+      }
+      return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'forbidden' }) })
+    })
+
+    const request = new Request('http://localhost/api/admin/migrate-blog', { method: 'POST' })
+    const response = await POST(request)
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(Array.isArray(body.results)).toBe(true)
+    expect(body.results.every((r: string) => r.startsWith('Error:'))).toBe(true)
+  })
+
+  it('records "Exception" when fetch throws', async () => {
+    mockRequireAdminAccess.mockResolvedValue(null)
+
+    fetchMock.mockRejectedValue(new Error('network down'))
+
+    const request = new Request('http://localhost/api/admin/migrate-blog', { method: 'POST' })
+    const response = await POST(request)
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(Array.isArray(body.results)).toBe(true)
+    expect(body.results.some((r: string) => r.includes('Exception:'))).toBe(true)
+  })
 })
