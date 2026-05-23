@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { getServiceClient } from '@/lib/supabase/service-role'
 import { redirect } from 'next/navigation'
 import JoinTeamClient from './join-client'
 
@@ -16,10 +16,7 @@ export default async function JoinTeamPage({
   if (!user) redirect(`/auth/login?next=/team/join?token=${token}`)
 
   // Use service role to fetch invite (invitee is not yet a team member — RLS would block them)
-  const serviceSupabase = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const serviceSupabase = getServiceClient()
   const { data: invite } = await serviceSupabase
     .from('team_invites')
     .select('*, teams:team_id(name)')

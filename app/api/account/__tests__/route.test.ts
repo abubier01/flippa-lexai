@@ -65,6 +65,18 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn().mockResolvedValue(mockSupabase),
 }))
 
+vi.mock('server-only', () => ({}))
+
+vi.mock('@/lib/supabase/service-role', () => ({
+  getServiceClient: vi.fn().mockReturnValue({
+    auth: {
+      admin: {
+        deleteUser: mockAdminDeleteUser,
+      },
+    },
+  }),
+}))
+
 // Rate-limit mock — default: allowed
 vi.mock('@/lib/security/rate-limit', () => ({
   getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
@@ -80,17 +92,6 @@ vi.mock('@/lib/security/rate-limit', () => ({
     'X-RateLimit-Remaining': '0',
     'X-RateLimit-Reset': String(Math.floor((Date.now() + 3600 * 1000) / 1000)),
     'Retry-After': '3600',
-  }),
-}))
-
-// Service client mock — createClient from @supabase/supabase-js
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn().mockReturnValue({
-    auth: {
-      admin: {
-        deleteUser: mockAdminDeleteUser,
-      },
-    },
   }),
 }))
 

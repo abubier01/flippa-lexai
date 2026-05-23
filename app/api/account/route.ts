@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { getServiceClient } from '@/lib/supabase/service-role'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
 
 export async function DELETE(req: NextRequest) {
@@ -91,10 +91,7 @@ export async function DELETE(req: NextRequest) {
   // we're about to destroy.
 
   // Now perform the destructive admin call.
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const service = getServiceClient()
   const { error: deleteError } = await service.auth.admin.deleteUser(user.id)
   if (deleteError) {
     console.error('[account/delete] error:', deleteError.message)

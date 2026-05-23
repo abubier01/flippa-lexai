@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 // POST /api/tickets — submit a new support ticket (public, no auth required)
 export async function POST(req: NextRequest) {
@@ -22,10 +22,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   // Use service role to bypass RLS on insert so anon users can submit
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const service = getServiceClient()
 
   const { data: ticket, error } = await service
     .from('support_tickets')

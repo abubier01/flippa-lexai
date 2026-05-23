@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { getServiceClient } from '@/lib/supabase/service-role'
 import { getActivePlan } from '@/lib/plan/access'
 
 export async function POST(req: NextRequest) {
@@ -11,10 +11,7 @@ export async function POST(req: NextRequest) {
   const { token } = await req.json()
   if (!token) return NextResponse.json({ error: 'Token is required.' }, { status: 400 })
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const service = getServiceClient()
 
   const { data: invite } = await service
     .from('team_invites')
