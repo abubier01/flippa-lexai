@@ -1,15 +1,8 @@
 // POST /api/team/invite — send an invite to an email
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { hasTeamAccess } from '@/lib/plan/access'
-
-function serviceRole() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -19,7 +12,7 @@ export async function POST(req: NextRequest) {
   const { email } = await req.json()
   if (!email?.trim()) return NextResponse.json({ error: 'Email is required.' }, { status: 400 })
 
-  const service = serviceRole()
+  const service = getServiceClient()
 
   const { data: profile } = await service
     .from('profiles')

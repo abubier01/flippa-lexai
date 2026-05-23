@@ -91,12 +91,12 @@ export async function POST(req: NextRequest) {
 }
 
 function extractUserId(event: Stripe.Event): string | null {
-  // Best-effort. The handlers resolve user_id authoritatively via
-  // stripe_customer_id. This is just for the billing_events.user_id column.
+  // Best-effort hint only. Handlers resolve the authoritative user through
+  // stripe_customer_id lookups. This value is stored for observability in
+  // billing_events.user_id and is never trusted for authorization.
   if (event.type === 'checkout.session.completed') {
     const s = event.data.object as Stripe.Checkout.Session
     return s.client_reference_id ?? s.metadata?.userId ?? null
   }
   return null
 }
-

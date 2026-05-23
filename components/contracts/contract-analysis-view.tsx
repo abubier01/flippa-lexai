@@ -13,6 +13,7 @@ import { FileText, Calendar, Users } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import type { Contract, ContractAnalysis, ChatMessage, Risk } from '@/lib/types'
+import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 
 interface Props {
   contract: Contract
@@ -21,13 +22,6 @@ interface Props {
   userPlan?: string
   userTeamId?: string | null
   isTeamViewer?: boolean
-}
-
-function computeRiskScoreFromRisks(risks: Risk[]): number {
-  if (!risks.length) return 0
-  const weights = { high: 100, medium: 55, low: 20 }
-  const total = risks.reduce((sum, r) => sum + (weights[r.severity] ?? 20), 0)
-  return Math.min(100, Math.round(total / risks.length))
 }
 
 export default function ContractAnalysisView({ contract, analysis, initialMessages, userPlan, userTeamId, isTeamViewer = false }: Props) {

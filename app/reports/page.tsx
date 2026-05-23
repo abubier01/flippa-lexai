@@ -1,5 +1,16 @@
 import { createClient } from '@/lib/supabase/server'
-import ReportsCharts from '@/components/reports/reports-charts'
+import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
+import dynamic from 'next/dynamic'
+
+const ReportsCharts = dynamic(() => import('@/components/reports/reports-charts'), {
+  loading: () => (
+    <div className="max-w-6xl mx-auto pb-20 md:pb-0">
+      <div className="bg-card rounded-xl border border-border p-6 text-sm text-muted-foreground">
+        Loading charts...
+      </div>
+    </div>
+  ),
+})
 
 interface ContractRow {
   id: string
@@ -15,16 +26,6 @@ interface AnalysisRow {
 
 interface RiskItem {
   severity: string
-}
-
-function computeScore(risks: RiskItem[]): number {
-  if (risks.length === 0) return 0
-  const weights: Record<string, number> = { high: 100, medium: 55, low: 20 }
-  let total = 0
-  for (const r of risks) {
-    total += weights[r.severity] ?? 20
-  }
-  return Math.min(100, Math.round(total / risks.length))
 }
 
 export default async function ReportsPage() {
@@ -71,7 +72,7 @@ export default async function ReportsPage() {
       else lowCount++
     }
     if (risks.length > 0) {
-      riskMap[a.contract_id] = computeScore(risks)
+      riskMap[a.contract_id] = computeRiskScoreFromRisks(risks)
     }
   }
 

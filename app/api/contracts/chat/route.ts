@@ -37,29 +37,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'contractId and message are required' }, { status: 400 })
     }
 
-    // Fetch contract + analysis
-    const { data: contract } = await supabase
-      .from('contracts')
-      .select('*')
-      .eq('id', contractId)
-      .eq('user_id', user.id)
-      .single()
+    const [
+      contractRes,
+      active,
+      messageCountRes,
+      analysisRes,
+      historyRes,
+    ] = await Promise.all([
+      supabase
+        .from('contracts')
+        .select('*')
+        .eq('id', contractId)
+        .eq('user_id', user.id)
+        .single(),
+      getActivePlan(user.id),
+      supabase
+        .from('chat_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('contract_id', contractId)
+        .eq('user_id', user.id)
+        .eq('role', 'user'),
+      supabase
+        .from('contract_analyses')
+        .select('*')
+        .eq('contract_id', contractId)
+        .single(),
+      // Get recent history — user turns only to prevent poisoned assistant turns
+      // from being re-fed into subsequent requests.
+      supabase
+        .from('chat_messages')
+        .select('role, content')
+        .eq('contract_id', contractId)
+        .eq('role', 'user')
+        .order('created_at', { ascending: true })
+        .limit(10),
+    ])
+
+    const contract = contractRes.data
 
     if (!contract) return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
 
-    const active = await getActivePlan(user.id)
     const plan = active.tier
     const limits = PLAN_LIMITS[plan]
 
-    // Count existing messages for this contract (user messages only)
-    const { count: messageCount } = await supabase
-      .from('chat_messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('contract_id', contractId)
-      .eq('user_id', user.id)
-      .eq('role', 'user')
-
-    const currentCount = messageCount || 0
+    const currentCount = messageCountRes.count || 0
     if (limits.messagesPerContract !== -1 && currentCount >= limits.messagesPerContract) {
       return NextResponse.json({ 
         error: `You've reached the ${limits.messagesPerContract} message limit for this contract. Upgrade to Pro for unlimited AI chat.`,
@@ -67,28 +88,17 @@ export async function POST(req: NextRequest) {
         plan,
       }, { status: 403 })
     }
-
-    const { data: analysis } = await supabase
-      .from('contract_analyses')
-      .select('*')
-      .eq('contract_id', contractId)
-      .single()
-
-    // Get recent history — user turns only to prevent poisoned assistant turns
-    // from being re-fed into subsequent requests.
-    const { data: history } = await supabase
-      .from('chat_messages')
-      .select('role, content')
-      .eq('contract_id', contractId)
-      .eq('role', 'user')
-      .order('created_at', { ascending: true })
-      .limit(10)
+    const analysis = analysisRes.data
+    const history = historyRes.data
 
     const requestId = randomUUID()
     const START = `<<<UNTRUSTED-CONTRACT-${requestId}-START>>>`
     const END = `<<<UNTRUSTED-CONTRACT-${requestId}-END>>>`
 
     // Shared scrub helper: strip any sentinel-shaped content from untrusted strings.
+    // Why: prompt safety depends on START/END sentinel boundaries. If an attacker
+    // can inject delimiter-shaped text into contract/title/history/message fields,
+    // they can forge boundaries and alter model instructions.
     const SCRUB_REGEX = /<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-(START|END)>>>/gi
     const scrub = (s: string) => s.replace(SCRUB_REGEX, '[REDACTED-SENTINEL]')
 

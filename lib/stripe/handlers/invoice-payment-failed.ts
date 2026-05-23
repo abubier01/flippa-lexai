@@ -1,13 +1,6 @@
 import 'server-only'
 import type Stripe from 'stripe'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-
-function service() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-}
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 export async function handleInvoicePaymentFailed(
   event: Stripe.InvoicePaymentFailedEvent,
@@ -18,7 +11,7 @@ export async function handleInvoicePaymentFailed(
     ? invoice.subscription
     : invoice.subscription.id
 
-  const supabase = service()
+  const supabase = getServiceClient()
   const { data: sub, error: subLookupError } = await supabase
     .from('subscriptions')
     .select('user_id')

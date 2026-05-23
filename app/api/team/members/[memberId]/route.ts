@@ -1,14 +1,7 @@
 // DELETE /api/team/members/[memberId] — remove a member (owner only)
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-
-function serviceRole() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 export async function DELETE(
   _req: NextRequest,
@@ -27,7 +20,7 @@ export async function DELETE(
 
   if (!profile?.team_id) return NextResponse.json({ error: 'Not in a team.' }, { status: 403 })
 
-  const service = serviceRole()
+  const service = getServiceClient()
 
   // Ensure requester is the team owner
   const { data: team } = await service

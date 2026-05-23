@@ -1,19 +1,12 @@
 import 'server-only'
 import { getStripe } from '@/lib/stripe'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-
-function service() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-}
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 export async function getOrCreateStripeCustomer(
   userId: string,
   email: string | null | undefined,
 ): Promise<string> {
-  const supabase = service()
+  const supabase = getServiceClient()
 
   const { data: profile, error } = await supabase
     .from('profiles')

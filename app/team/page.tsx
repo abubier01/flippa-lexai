@@ -1,10 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import TeamDashboard from '@/components/team/team-dashboard'
 import { hasTeamAccess } from '@/lib/plan/access'
+import { getServiceClient } from '@/lib/supabase/service-role'
+import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 
 export default async function TeamPage() {
   // Use user auth client only for getUser() — all DB reads use service role to bypass RLS
@@ -12,10 +13,7 @@ export default async function TeamPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const service = getServiceClient()
 
   const { data: profile } = await service
     .from('profiles')
@@ -86,7 +84,6 @@ export default async function TeamPage() {
 
     // Compute team analytics
     const analyses = sharedContracts.flatMap((c: any) => c.contract_analyses || [])
-    const weights: Record<string, number> = { high: 100, medium: 55, low: 20 }
     let totalRisk = 0, riskCount = 0
     let high = 0, medium = 0, low = 0
 
@@ -98,7 +95,7 @@ export default async function TeamPage() {
         else low++
       }
       if (risks.length > 0) {
-        const score = Math.min(100, Math.round(risks.reduce((s, r) => s + (weights[r.severity] ?? 20), 0) / risks.length))
+        const score = computeRiskScoreFromRisks(risks)
         totalRisk += score
         riskCount++
       }

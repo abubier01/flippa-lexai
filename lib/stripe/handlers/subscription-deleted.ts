@@ -1,19 +1,12 @@
 import 'server-only'
 import type Stripe from 'stripe'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-
-function service() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-}
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 export async function handleSubscriptionDeleted(
   event: Stripe.CustomerSubscriptionDeletedEvent,
 ): Promise<{ userId: string | null }> {
   const sub = event.data.object
-  const supabase = service()
+  const supabase = getServiceClient()
 
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id
   const { data: profile, error: profileLookupError } = await supabase

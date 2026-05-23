@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { ANALYZE_TRUNCATION_CHARS } from '@/lib/llm/limits'
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024   // 10 MB — matches client validation
 const MAX_TEXT_CHARS = 50_000              // ~50 KB raw text, ~12 pages of contract
@@ -199,11 +200,7 @@ export async function POST(req: NextRequest) {
     if (error) throw error
 
     const headers: Record<string, string> = {}
-    // TODO: 12000 is duplicated from analyze/route.ts:57. Extract to a shared
-    // constant in lib/llm/limits.ts (e.g., ANALYZE_TRUNCATION_CHARS) so this
-    // header stays in sync if the analyzer window changes. Out of scope for this
-    // PR — file the cleanup as a follow-up.
-    if (rawText.length > 12000) {
+    if (rawText.length > ANALYZE_TRUNCATION_CHARS) {
       headers['X-Lexai-Truncated'] = 'analysis-window-exceeded'
     }
     return NextResponse.json({ id: contract.id }, { headers })

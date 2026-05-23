@@ -1,15 +1,8 @@
 // POST /api/team/share-contract — toggle sharing a contract with the team
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { hasTeamAccess } from '@/lib/plan/access'
-
-function serviceRole() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -41,7 +34,7 @@ export async function POST(req: NextRequest) {
   if (!contract) return NextResponse.json({ error: 'Contract not found.' }, { status: 404 })
 
   // Use service role to update — RLS on contracts update may block this
-  const service = serviceRole()
+  const service = getServiceClient()
   const { error } = await service.from('contracts').update({
     shared_with_team: share,
     team_id: share ? profile.team_id : null,

@@ -1,12 +1,5 @@
 import 'server-only'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-
-function service() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-}
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 /**
  * Attempt to claim a Stripe event for processing.
@@ -24,7 +17,7 @@ export async function tryClaimEvent(
   userId: string | null,
   payload: unknown,
 ): Promise<boolean> {
-  const supabase = service()
+  const supabase = getServiceClient()
   const { error } = await supabase.from('billing_events').insert({
     event_id: eventId,
     type,
@@ -38,7 +31,7 @@ export async function tryClaimEvent(
 }
 
 export async function markEventProcessed(eventId: string): Promise<void> {
-  const supabase = service()
+  const supabase = getServiceClient()
   const { error } = await supabase
     .from('billing_events')
     .update({ processed_at: new Date().toISOString() })
@@ -54,7 +47,7 @@ export async function markEventProcessed(eventId: string): Promise<void> {
  * processed_at=NULL but claim=false and silently drop the event.
  */
 export async function releaseClaim(eventId: string): Promise<void> {
-  const supabase = service()
+  const supabase = getServiceClient()
   const { error } = await supabase
     .from('billing_events')
     .delete()

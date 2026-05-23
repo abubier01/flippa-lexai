@@ -2,15 +2,8 @@
 // POST /api/team — create a new team (team plan only)
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { hasTeamAccess } from '@/lib/plan/access'
-
-function serviceRole() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 export async function GET() {
   const supabase = await createClient()
@@ -27,21 +20,44 @@ export async function GET() {
     return NextResponse.json({ team: null, members: [], invites: [] })
   }
 
-  const service = serviceRole()
-
-  const [teamRes, membersRes, invitesRes] = await Promise.all([
+  const service = getServiceClient()
+  const [teamRes, membersWithProfilesRes, invitesRes] = await Promise.all([
     service.from('teams').select('*').eq('id', profile.team_id).single(),
-    service.from('team_members').select('*').eq('team_id', profile.team_id),
+    service
+      .from('team_members')
+      .select('id, user_id, role, joined_at, profiles(id, full_name, plan)')
+      .eq('team_id', profile.team_id),
     service.from('team_invites').select('*').eq('team_id', profile.team_id).eq('status', 'pending'),
   ])
 
-  const rawMembers: { user_id: string }[] = membersRes.data || []
-  const userIds = rawMembers.map(m => m.user_id).filter(Boolean)
-  const { data: profileRows } = userIds.length > 0
-    ? await service.from('profiles').select('id, full_name, plan').in('id', userIds)
-    : { data: [] as { id: string; full_name: string | null; plan: string }[] }
-  const profileMap = Object.fromEntries((profileRows || []).map((p: { id: string; full_name: string | null; plan: string }) => [p.id, p]))
-  const members = rawMembers.map(m => ({ ...m, profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'free' } }))
+  let members: Array<{
+    id: string
+    user_id: string
+    role: string
+    joined_at: string
+    profiles: { id: string; full_name: string | null; plan: string }
+  }> = []
+  if (!membersWithProfilesRes.error && membersWithProfilesRes.data) {
+    members = membersWithProfilesRes.data.map((m) => {
+      const profileValue = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
+      return {
+        ...m,
+        profiles: profileValue ?? { id: m.user_id, full_name: null, plan: 'free' },
+      }
+    })
+  } else {
+    const { data: membersRes } = await service.from('team_members').select('*').eq('team_id', profile.team_id)
+    const rawMembers: { id: string; user_id: string; role: string; joined_at: string }[] = membersRes || []
+    const userIds = rawMembers.map(m => m.user_id).filter(Boolean)
+    const { data: profileRows } = userIds.length > 0
+      ? await service.from('profiles').select('id, full_name, plan').in('id', userIds)
+      : { data: [] as { id: string; full_name: string | null; plan: string }[] }
+    const profileMap = Object.fromEntries((profileRows || []).map((p) => [p.id, p]))
+    members = rawMembers.map((m) => ({
+      ...m,
+      profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'free' },
+    }))
+  }
 
   return NextResponse.json({
     team: teamRes.data,
@@ -74,7 +90,7 @@ export async function POST(req: NextRequest) {
   if (!name?.trim()) return NextResponse.json({ error: 'Team name is required.' }, { status: 400 })
 
   // Use service role to bypass RLS for all mutations
-  const service = serviceRole()
+  const service = getServiceClient()
 
   const { data: team, error: teamErr } = await service
     .from('teams')

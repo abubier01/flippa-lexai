@@ -5,29 +5,38 @@ import { Upload, FileText, AlertTriangle, CheckCircle, ArrowRight, TrendingUp, Z
 import { formatDistanceToNow } from 'date-fns'
 import RiskBadge from '@/components/contracts/risk-badge'
 import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
+import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: contracts } = await supabase
-    .from('contracts')
-    .select('*')
-    .eq('user_id', user!.id)
-    .order('created_at', { ascending: false })
-    .limit(5)
+  const [contractsRes, allContractsRes, profileRes, analysesRes] = await Promise.all([
+    supabase
+      .from('contracts')
+      .select('*')
+      .eq('user_id', user!.id)
+      .order('created_at', { ascending: false })
+      .limit(5),
+    supabase
+      .from('contracts')
+      .select('id, risk_score, status')
+      .eq('user_id', user!.id),
+    supabase
+      .from('profiles')
+      .select('plan, contracts_this_month, usage_reset_at')
+      .eq('id', user!.id)
+      .single(),
+    supabase
+      .from('contract_analyses')
+      .select('contract_id, risks')
+      .eq('user_id', user!.id),
+  ])
 
-  const { data: allContracts } = await supabase
-    .from('contracts')
-    .select('id, risk_score, status')
-    .eq('user_id', user!.id)
-
-  // Fetch user profile for plan and usage
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('plan, contracts_this_month, usage_reset_at')
-    .eq('id', user!.id)
-    .single()
+  const contracts = contractsRes.data
+  const allContracts = allContractsRes.data
+  const profile = profileRes.data
+  const analyses = analysesRes.data
 
   const plan = (profile?.plan || 'free') as PlanType
   const limits = PLAN_LIMITS[plan]
@@ -42,22 +51,12 @@ export default async function DashboardPage() {
     contractsThisMonth = 0
   }
 
-  // Fetch analyses to derive accurate risk scores from actual risk items
-  const { data: analyses } = await supabase
-    .from('contract_analyses')
-    .select('contract_id, risks')
-    .eq('user_id', user!.id)
-
   // Build contract_id -> effective risk score from risk items
-  const weights: Record<string, number> = { high: 100, medium: 55, low: 20 }
   const analysisRiskMap: Record<string, number> = {}
   analyses?.forEach(a => {
     const risks = a.risks as { severity: string }[] || []
     if (a.contract_id && risks.length > 0) {
-      const derived = Math.min(100, Math.round(
-        risks.reduce((sum, r) => sum + (weights[r.severity] ?? 20), 0) / risks.length
-      ))
-      analysisRiskMap[a.contract_id] = derived
+      analysisRiskMap[a.contract_id] = computeRiskScoreFromRisks(risks)
     }
   })
 

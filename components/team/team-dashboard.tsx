@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import RiskBadge from '@/components/contracts/risk-badge'
+import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 
 interface Member {
   id: string
@@ -75,13 +76,12 @@ export default function TeamDashboard({
   const isOwner = team ? members.find(m => m.user_id === currentUserId)?.role === 'owner' : false
 
   // Effective risk score from analyses
-  const weights: Record<string, number> = { high: 100, medium: 55, low: 20 }
   function effectiveScore(c: SharedContract) {
     const analyses = c.contract_analyses || []
     for (const a of analyses) {
       const risks = a.risks || []
       if (risks.length > 0) {
-        return Math.min(100, Math.round(risks.reduce((s, r) => s + (weights[r.severity] ?? 20), 0) / risks.length))
+        return computeRiskScoreFromRisks(risks)
       }
     }
     return c.risk_score ?? 0

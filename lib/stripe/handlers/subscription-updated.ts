@@ -1,14 +1,7 @@
 import 'server-only'
 import type Stripe from 'stripe'
 import { priceIdToPlan } from '@/lib/stripe/price-to-plan'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-
-function service() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-}
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 // Handles customer.subscription.created and customer.subscription.updated.
 // The two events carry the same shape; we treat created as a backstop in case
@@ -24,7 +17,7 @@ export async function handleSubscriptionUpserted(
   const plan = priceIdToPlan(item.price.id)
   if (!plan) throw new Error(`Subscription ${sub.id}: unrecognized price ${item.price.id}`)
 
-  const supabase = service()
+  const supabase = getServiceClient()
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id
 
   // Resolve user_id via the stripe_customer_id we stored at checkout time.

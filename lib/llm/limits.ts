@@ -1,0 +1,1 @@
+export const ANALYZE_TRUNCATION_CHARS = 12_000

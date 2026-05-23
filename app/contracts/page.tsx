@@ -5,6 +5,7 @@ import { FileText, Upload } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import RiskBadge from '@/components/contracts/risk-badge'
 import ContractRowActions from '@/components/contracts/contract-row-actions'
+import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 
 export default async function ContractsPage() {
   const supabase = await createClient()
@@ -22,14 +23,11 @@ export default async function ContractsPage() {
     .select('contract_id, risks')
     .eq('user_id', user!.id)
 
-  const weights: Record<string, number> = { high: 100, medium: 55, low: 20 }
   const analysisRiskMap: Record<string, number> = {}
   for (const a of analyses ?? []) {
     const risks = a.risks as { severity: string }[] || []
     if (a.contract_id && risks.length > 0) {
-      analysisRiskMap[a.contract_id] = Math.min(100, Math.round(
-        risks.reduce((sum, r) => sum + (weights[r.severity] ?? 20), 0) / risks.length
-      ))
+      analysisRiskMap[a.contract_id] = computeRiskScoreFromRisks(risks)
     }
   }
 

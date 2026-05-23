@@ -2,14 +2,7 @@ import 'server-only'
 import type Stripe from 'stripe'
 import { getStripe } from '@/lib/stripe'
 import { priceIdToPlan } from '@/lib/stripe/price-to-plan'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-
-function service() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-}
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 export async function handleCheckoutSessionCompleted(
   event: Stripe.CheckoutSessionCompletedEvent,
@@ -36,7 +29,7 @@ export async function handleCheckoutSessionCompleted(
   const plan = priceIdToPlan(item.price.id)
   if (!plan) throw new Error(`Subscription ${sub.id}: unrecognized price ${item.price.id}`)
 
-  const supabase = service()
+  const supabase = getServiceClient()
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id
 
   const { error: upsertError } = await supabase.from('subscriptions').upsert({

@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createGroq } from '@ai-sdk/groq'
 import { generateText } from 'ai'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { ANALYZE_TRUNCATION_CHARS } from '@/lib/llm/limits'
+import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 import { AnalysisSchema } from '@/lib/llm/schemas'
 
 export async function POST(req: NextRequest) {
@@ -53,13 +55,15 @@ export async function POST(req: NextRequest) {
     await supabase.from('contracts').update({ status: 'processing' }).eq('id', contractId)
 
     const contractText = contract.raw_text || ''
-    const truncated = contractText.slice(0, 12000)
+    const truncated = contractText.slice(0, ANALYZE_TRUNCATION_CHARS)
 
     const requestId = randomUUID()
     const START = `<<<UNTRUSTED-CONTRACT-${requestId}-START>>>`
     const END = `<<<UNTRUSTED-CONTRACT-${requestId}-END>>>`
 
     // Scrub any pre-existing sentinel-shaped content from the contract.
+    // Without this, a malicious document could forge START/END delimiter tokens
+    // and confuse the model about where untrusted user content begins/ends.
     const safeText = truncated
       .replace(/<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')
 
@@ -129,12 +133,9 @@ Respond with ONLY a valid JSON object matching this exact schema (no prose, no m
 
     if (analysisError) throw analysisError
 
-    // Compute risk_score: prefer AI-provided value, but if 0 or missing derive from risk items
-    const risks: { severity: string }[] = analysis.risks || []
-    const weights: Record<string, number> = { high: 100, medium: 55, low: 20 }
-    const derivedScore = risks.length > 0
-      ? Math.min(100, Math.round(risks.reduce((sum, r) => sum + (weights[r.severity] ?? 20), 0) / risks.length))
-      : 0
+    // Compute risk_score: prefer AI-provided value, but if 0 or missing derive from risk items.
+    const risks = (analysis.risks as Array<{ severity: string }>) || []
+    const derivedScore = computeRiskScoreFromRisks(risks)
     const finalScore = analysis.risk_score && analysis.risk_score > 0
       ? Math.min(100, Math.max(0, analysis.risk_score))
       : derivedScore
