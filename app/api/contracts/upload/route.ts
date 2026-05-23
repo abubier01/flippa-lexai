@@ -5,25 +5,15 @@ import { PLAN_LIMITS } from '@/lib/plan-limits'
 
 // Dynamic import for server-side document parsing
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  try {
-    const pdfParse = (await import('pdf-parse')).default
-    const data = await pdfParse(buffer)
-    return data.text || ''
-  } catch (err) {
-    console.error('[v0] PDF parsing error:', err)
-    return ''
-  }
+  const pdfParse = (await import('pdf-parse')).default
+  const data = await pdfParse(buffer)
+  return data.text || ''
 }
 
 async function extractTextFromDOCX(buffer: Buffer): Promise<string> {
-  try {
-    const mammoth = await import('mammoth')
-    const result = await mammoth.extractRawText({ buffer })
-    return result.value || ''
-  } catch (err) {
-    console.error('[v0] DOCX parsing error:', err)
-    return ''
-  }
+  const mammoth = await import('mammoth')
+  const result = await mammoth.extractRawText({ buffer })
+  return result.value || ''
 }
 
 export async function POST(req: NextRequest) {
@@ -89,9 +79,18 @@ export async function POST(req: NextRequest) {
       } else if (file.type === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
         // PDF files - extract text using pdf-parse
         const buffer = Buffer.from(await file.arrayBuffer())
-        rawText = await extractTextFromPDF(buffer)
+        try {
+          rawText = await extractTextFromPDF(buffer)
+        } catch (err) {
+          console.error('PDF parsing error:', err)
+          return NextResponse.json({
+            error: 'Could not read this PDF. It may be corrupted or password-protected.',
+          }, { status: 422 })
+        }
         if (!rawText.trim()) {
-          rawText = `[PDF file uploaded: ${file.name}]\n\nThe PDF text could not be fully extracted. It may be an image-based or scanned document.`
+          return NextResponse.json({
+            error: 'This PDF appears to be image-based or scanned. Please paste the text directly, or upload a text-based PDF.',
+          }, { status: 422 })
         }
       } else if (
         file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
@@ -99,9 +98,18 @@ export async function POST(req: NextRequest) {
       ) {
         // DOCX files - extract text using mammoth
         const buffer = Buffer.from(await file.arrayBuffer())
-        rawText = await extractTextFromDOCX(buffer)
+        try {
+          rawText = await extractTextFromDOCX(buffer)
+        } catch (err) {
+          console.error('DOCX parsing error:', err)
+          return NextResponse.json({
+            error: 'Could not read this DOCX file. It may be corrupted.',
+          }, { status: 422 })
+        }
         if (!rawText.trim()) {
-          rawText = `[DOCX file uploaded: ${file.name}]\n\nThe document text could not be fully extracted.`
+          return NextResponse.json({
+            error: 'This DOCX appears to have no extractable text. Please paste the text directly.',
+          }, { status: 422 })
         }
       } else if (fileNameLower.endsWith('.doc')) {
         // Legacy .doc files - not supported by mammoth, return message
