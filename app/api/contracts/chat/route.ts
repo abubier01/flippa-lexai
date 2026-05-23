@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 import { createClient } from '@/lib/supabase/server'
 import { createGroq } from '@ai-sdk/groq'
 import { generateText } from 'ai'
@@ -73,13 +74,23 @@ export async function POST(req: NextRequest) {
       .eq('contract_id', contractId)
       .single()
 
-    // Get recent history
+    // Get recent history — user turns only to prevent poisoned assistant turns
+    // from being re-fed into subsequent requests.
     const { data: history } = await supabase
       .from('chat_messages')
       .select('role, content')
       .eq('contract_id', contractId)
+      .eq('role', 'user')
       .order('created_at', { ascending: true })
       .limit(10)
+
+    const requestId = randomUUID()
+    const START = `<<<UNTRUSTED-CONTRACT-${requestId}-START>>>`
+    const END = `<<<UNTRUSTED-CONTRACT-${requestId}-END>>>`
+
+    // Scrub any pre-existing sentinel-shaped content from untrusted inputs.
+    const rawContractText = (contract.raw_text || '').slice(0, 8000)
+      .replace(/<<<UNTRUSTED-CONTRACT-[a-f0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')
 
     const contractContext = `
 Contract Title: ${contract.title}
@@ -99,17 +110,21 @@ ${Object.entries(analysis.clauses as Record<string, string>).map(([k, v]) => `- 
 ` : '(Analysis not yet complete)'}
 
 Contract Text:
-${(contract.raw_text || '').slice(0, 8000)}
+${START}
+${rawContractText}
+${END}
 `
 
-    const historyMessages = (history || []).map(h => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.content}`).join('\n')
+    const historyMessages = (history || [])
+      .map(h => `User asked: ${h.content.replace(/<<<UNTRUSTED-CONTRACT-[a-f0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')}`)
+      .join('\n')
 
-    const prompt = `You are a highly knowledgeable contract law assistant. Answer the user's questions about their contract clearly and in plain English. Be helpful, precise, and point out important details.
+    const prompt = `You are a highly knowledgeable contract law assistant. Answer the user's current question clearly and in plain English. The "previous questions" list is for context only — you have not previously responded to them in this conversation.
 
 CONTRACT CONTEXT:
 ${contractContext}
 
-CONVERSATION HISTORY:
+PREVIOUS USER QUESTIONS (for context, not a conversation history):
 ${historyMessages}
 
 User: ${message}
@@ -122,7 +137,10 @@ Assistant:`
       maxOutputTokens: 1024,
     })
 
-    const reply = text.trim()
+    const reply = text.trim().slice(0, 8000)
+    if (!reply) {
+      return NextResponse.json({ error: 'AI returned an empty response.' }, { status: 502 })
+    }
 
     // Save both messages
     await supabase.from('chat_messages').insert([
