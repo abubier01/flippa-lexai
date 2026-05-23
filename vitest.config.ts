@@ -11,7 +11,6 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      all: true,
       include: [
         'app/api/account/route.ts',
         'app/api/contracts/**/route.ts',

@@ -166,11 +166,11 @@ function buildDocxRequest(fileName = 'contract.docx'): NextRequest {
 // ---------------------------------------------------------------------------
 
 function getReleaseCalls(): number {
-  return mockRpc.mock.calls.filter(([name]: [string]) => name === 'release_monthly_contract').length
+  return mockRpc.mock.calls.filter((call) => call[0] === 'release_monthly_contract').length
 }
 
 function getClaimCalls(): number {
-  return mockRpc.mock.calls.filter(([name]: [string]) => name === 'claim_monthly_contract').length
+  return mockRpc.mock.calls.filter((call) => call[0] === 'claim_monthly_contract').length
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ describe('POST /api/contracts/upload — atomic quota RPC', () => {
     const res = await POST(buildPdfRequest())
 
     expect(res.status).toBe(200)
-    const claimCalls = mockRpc.mock.calls.filter(([name]: [string]) => name === 'claim_monthly_contract')
+    const claimCalls = mockRpc.mock.calls.filter((call) => call[0] === 'claim_monthly_contract')
     expect(claimCalls).toHaveLength(1)
     expect(claimCalls[0][1]).toEqual({ p_limit: -1 }) // pro plan has -1 limit
   })

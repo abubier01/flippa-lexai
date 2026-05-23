@@ -185,7 +185,7 @@ describe('POST /api/contracts/analyze — happy path', () => {
     // Find a call that sets status: 'completed'
     const updateCalls = updateMock.mock.calls
     const completedCall = updateCalls.find(
-      ([arg]: [Record<string, unknown>]) => arg.status === 'completed'
+      (call) => (call[0] as Record<string, unknown>).status === 'completed'
     )
     expect(completedCall).toBeDefined()
   })
@@ -220,7 +220,7 @@ describe('POST /api/contracts/analyze — schema validation failure', () => {
     // updateMock should have been called with { status: 'failed' } at some point
     const updateCalls = updateMock.mock.calls
     const failedCall = updateCalls.find(
-      ([arg]: [Record<string, unknown>]) => arg.status === 'failed'
+      (call) => (call[0] as Record<string, unknown>).status === 'failed'
     )
     expect(failedCall).toBeDefined()
   })
@@ -236,7 +236,7 @@ describe('POST /api/contracts/analyze — schema validation failure', () => {
 
     // from('contract_analyses') should NOT have been called
     const contractAnalysesCalls = (supabase.from as ReturnType<typeof vi.fn>).mock.calls
-      .filter(([table]: [string]) => table === 'contract_analyses')
+      .filter((call) => call[0] === 'contract_analyses')
     expect(contractAnalysesCalls).toHaveLength(0)
   })
 })
@@ -264,7 +264,7 @@ describe('POST /api/contracts/analyze — invalid JSON from AI', () => {
     await POST(buildRequest())
 
     const contractAnalysesCalls = (supabase.from as ReturnType<typeof vi.fn>).mock.calls
-      .filter(([table]: [string]) => table === 'contract_analyses')
+      .filter((call) => call[0] === 'contract_analyses')
     expect(contractAnalysesCalls).toHaveLength(0)
   })
 })

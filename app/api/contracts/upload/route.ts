@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       .rpc('claim_monthly_contract', {
         p_limit: limits.contractsPerMonth,
       })
-      .single()
+      .single<{ allowed: boolean; current_count: number }>()
 
     if (claimError) {
       console.error('[upload] claim error:', claimError.message)
