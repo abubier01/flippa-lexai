@@ -21,6 +21,11 @@ async function extractTextFromDOCX(buffer: Buffer): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
+  // release() is hoisted so the outer catch block can call it even if the
+  // claim succeeded but the DB insert (or any subsequent step) threw.
+  // Before the claim is made, release() is a no-op.
+  let release: () => Promise<void> = async () => {}
+
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -39,40 +44,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Fetch user profile and check plan limits
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('plan, contracts_this_month, usage_reset_at')
-      .eq('id', user.id)
-      .single()
-
-    const active = await getActivePlan(user.id)
-    const plan = active.tier
-    const limits = PLAN_LIMITS[plan]
-    let contractsThisMonth = profile?.contracts_this_month || 0
-    const usageResetAt = profile?.usage_reset_at ? new Date(profile.usage_reset_at) : new Date()
-
-    // Check if we need to reset monthly counter
-    const now = new Date()
-    const monthsSinceReset = (now.getFullYear() - usageResetAt.getFullYear()) * 12 + 
-                             (now.getMonth() - usageResetAt.getMonth())
-    if (monthsSinceReset >= 1) {
-      contractsThisMonth = 0
-      await supabase.from('profiles').update({
-        contracts_this_month: 0,
-        usage_reset_at: now.toISOString(),
-      }).eq('id', user.id)
-    }
-
-    // Check contract limit
-    if (limits.contractsPerMonth !== -1 && contractsThisMonth >= limits.contractsPerMonth) {
-      return NextResponse.json({ 
-        error: `You've reached your monthly limit of ${limits.contractsPerMonth} contract analyses. Upgrade to Pro for unlimited analyses.`,
-        limitReached: true,
-        plan,
-      }, { status: 403 })
-    }
-
+    // Parse form data and run pre-claim validations (size cap, title, text-type)
+    // BEFORE claiming a quota slot — these guards must not consume quota.
     const formData = await req.formData()
     const title = formData.get('title') as string
     const file = formData.get('file') as File | null
@@ -98,6 +71,46 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if (!file && !text) {
+      return NextResponse.json({ error: 'No file or text provided' }, { status: 400 })
+    }
+
+    // Claim a quota slot atomically. The RPC resets the monthly counter if the
+    // month rolled over, increments it if under the limit, and returns whether
+    // the call is allowed. This replaces the old read-modify-write pattern
+    // (audit finding #7).
+    const active = await getActivePlan(user.id)
+    const plan = active.tier
+    const limits = PLAN_LIMITS[plan]
+
+    const { data: claim, error: claimError } = await supabase
+      .rpc('claim_monthly_contract', {
+        p_limit: limits.contractsPerMonth,
+      })
+      .single()
+
+    if (claimError) {
+      console.error('[upload] claim error:', claimError.message)
+      return NextResponse.json({ error: 'Failed to check quota' }, { status: 500 })
+    }
+
+    if (!claim?.allowed) {
+      return NextResponse.json({
+        error: `You've reached your monthly limit of ${limits.contractsPerMonth} contract analyses. Upgrade to Pro for unlimited analyses.`,
+        limitReached: true,
+        plan,
+      }, { status: 403 })
+    }
+
+    // From here on, ANY failure path must release the claim.
+    // Wire up the outer release() so the catch block can also call it.
+    let claimReleased = false
+    release = async () => {
+      if (claimReleased) return
+      claimReleased = true
+      await supabase.rpc('release_monthly_contract').then(() => {}, () => {})
+    }
+
     let rawText = ''
     let actualFileName = ''
     let fileSize = 0
@@ -117,11 +130,13 @@ export async function POST(req: NextRequest) {
           rawText = await extractTextFromPDF(buffer)
         } catch (err) {
           console.error('PDF parsing error:', err)
+          await release()
           return NextResponse.json({
             error: 'Could not read this PDF. It may be corrupted or password-protected.',
           }, { status: 422 })
         }
         if (!rawText.trim()) {
+          await release()
           return NextResponse.json({
             error: 'This PDF appears to be image-based or scanned. Please paste the text directly, or upload a text-based PDF.',
           }, { status: 422 })
@@ -136,11 +151,13 @@ export async function POST(req: NextRequest) {
           rawText = await extractTextFromDOCX(buffer)
         } catch (err) {
           console.error('DOCX parsing error:', err)
+          await release()
           return NextResponse.json({
             error: 'Could not read this DOCX file. It may be corrupted.',
           }, { status: 422 })
         }
         if (!rawText.trim()) {
+          await release()
           return NextResponse.json({
             error: 'This DOCX appears to have no extractable text. Please paste the text directly.',
           }, { status: 422 })
@@ -152,12 +169,11 @@ export async function POST(req: NextRequest) {
         // Unknown format
         rawText = `[File uploaded: ${file.name}]\n\nThis file type is not fully supported. Please upload PDF, DOCX, or TXT files, or paste the contract text directly.`
       }
-    } else if (text) {
-      rawText = text
-      actualFileName = fileName || 'pasted-text.txt'
-      fileSize = new Blob([text]).size
     } else {
-      return NextResponse.json({ error: 'No file or text provided' }, { status: 400 })
+      // text is guaranteed non-null here (the !file && !text guard above returned early)
+      rawText = text!
+      actualFileName = fileName || 'pasted-text.txt'
+      fileSize = new Blob([text!]).size
     }
 
     // Insert contract record
@@ -177,11 +193,6 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error
 
-    // Increment monthly usage counter
-    await supabase.from('profiles').update({
-      contracts_this_month: contractsThisMonth + 1,
-    }).eq('id', user.id)
-
     const headers: Record<string, string> = {}
     // TODO: 12000 is duplicated from analyze/route.ts:57. Extract to a shared
     // constant in lib/llm/limits.ts (e.g., ANALYZE_TRUNCATION_CHARS) so this
@@ -193,6 +204,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id: contract.id }, { headers })
   } catch (err) {
     console.error('Upload error:', err)
+    await release()
     return NextResponse.json({ error: 'Failed to upload contract' }, { status: 500 })
   }
 }
