@@ -19,7 +19,7 @@ import { NextRequest } from 'next/server'
 // shared mutable mock references.
 // ---------------------------------------------------------------------------
 
-const { mockDeleteChain, mockSupabase } = vi.hoisted(() => {
+const { mockDeleteChain, mockSupabase, resetEqCount } = vi.hoisted(() => {
   const mockDeleteChain = {
     eq: vi.fn().mockReturnThis(),
     // Default: successful delete returning count 1
@@ -143,6 +143,7 @@ function setDeleteResult(result: { error: { message: string } | null; count: num
 describe('DELETE /api/contracts/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetEqCount()
     // Restore default rate limit (allowed) after each test
     consumeRateLimitMock.mockReturnValue({
       allowed: true,

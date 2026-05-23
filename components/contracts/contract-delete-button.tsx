@@ -6,7 +6,6 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -30,6 +29,7 @@ interface Props {
 }
 
 export default function ContractDeleteButton({ contractId, onDeleted, variant = 'ghost' }: Props) {
+  const [open, setOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   async function handleDelete() {
@@ -39,8 +39,9 @@ export default function ContractDeleteButton({ contractId, onDeleted, variant = 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         toast.error(data.error ?? 'Failed to delete contract')
-        return
+        return  // do NOT close dialog on failure — let user see the toast and decide
       }
+      setOpen(false)  // only close on success
       toast.success('Contract deleted')
       onDeleted()
     } catch {
@@ -51,20 +52,19 @@ export default function ContractDeleteButton({ contractId, onDeleted, variant = 
   }
 
   return (
-    <AlertDialog>
+    <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
         {variant === 'outline' ? (
           <Button
             variant="outline"
             size="sm"
             className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-            disabled={deleting}
           >
             <Trash2 className="w-4 h-4 mr-1.5" />
-            {deleting ? 'Deleting…' : 'Delete'}
+            Delete
           </Button>
         ) : (
-          <Button variant="ghost" size="sm" disabled={deleting} className="text-muted-foreground hover:text-destructive">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
             <Trash2 className="w-4 h-4" />
             <span className="sr-only">Delete contract</span>
           </Button>
@@ -79,13 +79,14 @@ export default function ContractDeleteButton({ contractId, onDeleted, variant = 
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <Button
+            variant="destructive"
             onClick={handleDelete}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={deleting}
           >
-            Delete
-          </AlertDialogAction>
+            {deleting ? 'Deleting…' : 'Delete'}
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
