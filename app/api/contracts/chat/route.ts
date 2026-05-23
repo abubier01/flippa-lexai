@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@/lib/supabase/server'
 import { createGroq } from '@ai-sdk/groq'
-import { generateText } from 'ai'
+import { streamText } from 'ai'
 import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
@@ -149,29 +149,24 @@ ${historyMessages}
 User: ${safeMessage}
 Assistant:`
 
-    const { text } = await generateText({
+    const result = streamText({
       model: groq('llama-3.3-70b-versatile'),
       prompt,
       temperature: 0.3,
       maxOutputTokens: 1024,
+      onFinish: async ({ text }) => {
+        const reply = text.trim().slice(0, 8000)
+        if (!reply) return
+        const { error } = await supabase.from('chat_messages').insert([
+          { contract_id: contractId, user_id: user.id, role: 'user', content: safeMessage },
+          { contract_id: contractId, user_id: user.id, role: 'assistant', content: reply },
+        ])
+        if (error) {
+          rlog.error('chat.persist.failed', { err: new Error(error.message), userId: user.id })
+        }
+      },
     })
-
-    if (typeof text !== 'string') {
-      return NextResponse.json({ error: 'AI returned an empty response.' }, { status: 502 })
-    }
-
-    const reply = text.trim().slice(0, 8000)
-    if (!reply) {
-      return NextResponse.json({ error: 'AI returned an empty response.' }, { status: 502 })
-    }
-
-    // Save both messages
-    await supabase.from('chat_messages').insert([
-      { contract_id: contractId, user_id: user.id, role: 'user', content: safeMessage },
-      { contract_id: contractId, user_id: user.id, role: 'assistant', content: reply },
-    ])
-
-    return NextResponse.json({ reply })
+    return result.toTextStreamResponse()
   } catch (err) {
     rlog.error('chat.failed', { err, ...(userId ? { userId } : {}) })
     return NextResponse.json({ error: 'Failed to generate response' }, { status: 500 })

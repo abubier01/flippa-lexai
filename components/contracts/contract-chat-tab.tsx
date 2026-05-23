@@ -56,8 +56,8 @@ export default function ContractChatTab({ contractId, initialMessages }: Props) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contractId, message: text }),
       })
-      const data = await res.json()
       if (!res.ok) {
+        const data = await res.json().catch(() => ({} as { error?: string; limitReached?: boolean }))
         if (data.limitReached) {
           setLimitReached(true)
           setMessages(prev => prev.filter(m => m.id !== userMsg.id))
@@ -67,15 +67,36 @@ export default function ContractChatTab({ contractId, initialMessages }: Props) 
         throw new Error(data.error || 'Failed to get response')
       }
 
+      if (!res.body) throw new Error('No response body from chat stream')
+
+      const assistantId = `local-assistant-${localIdRef.current}`
       const assistantMsg: ChatMessage = {
         id: `local-assistant-${localIdRef.current}`,
         contract_id: contractId,
         user_id: '',
         role: 'assistant',
-        content: data.reply,
+        content: '',
         created_at: new Date().toISOString(),
       }
       setMessages(prev => [...prev, assistantMsg])
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let reply = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        reply += decoder.decode(value, { stream: true })
+        setMessages(prev =>
+          prev.map(m => (m.id === assistantId ? { ...m, content: reply } : m)),
+        )
+      }
+      reply += decoder.decode()
+
+      if (!reply.trim()) {
+        setMessages(prev => prev.filter(m => m.id !== assistantId))
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to send message')
       setMessages(prev => prev.filter(m => m.id !== userMsg.id))
