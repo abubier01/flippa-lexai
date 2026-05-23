@@ -64,6 +64,25 @@ vi.mock('@/lib/plan-limits', () => ({
   },
 }))
 
+// Rate-limit mock — default: allowed. Individual tests can override with
+// mockReturnValueOnce to simulate the limit being hit.
+vi.mock('@/lib/security/rate-limit', () => ({
+  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
+  consumeRateLimit: vi.fn().mockReturnValue({
+    allowed: true,
+    limit: 10,
+    remaining: 9,
+    resetAt: Date.now() + 60 * 60 * 1000,
+    retryAfterSeconds: 0,
+  }),
+  rateLimitHeaders: vi.fn().mockReturnValue({
+    'X-RateLimit-Limit': '10',
+    'X-RateLimit-Remaining': '0',
+    'X-RateLimit-Reset': String(Math.floor((Date.now() + 3600 * 1000) / 1000)),
+    'Retry-After': '3600',
+  }),
+}))
+
 // Dynamic mocks for the parsers. Individual tests override these with
 // mockResolvedValueOnce / mockRejectedValueOnce.
 vi.mock('pdf-parse', () => ({
@@ -80,9 +99,11 @@ vi.mock('mammoth', () => ({
 import { POST } from '../route'
 import pdfParseMod from 'pdf-parse'
 import * as mammothMod from 'mammoth'
+import * as rateLimitMod from '@/lib/security/rate-limit'
 
 const pdfParse = pdfParseMod as unknown as ReturnType<typeof vi.fn>
 const mammothExtract = mammothMod.extractRawText as unknown as ReturnType<typeof vi.fn>
+const consumeRateLimitMock = rateLimitMod.consumeRateLimit as unknown as ReturnType<typeof vi.fn>
 
 // ---------------------------------------------------------------------------
 // Request builders
@@ -314,5 +335,38 @@ describe('POST /api/contracts/upload — server-side size caps', () => {
 
     expect(res.status).toBe(400)
     expect(body.error).toBe('Invalid text field')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Rate-limit tests (audit finding #6)
+// ---------------------------------------------------------------------------
+
+describe('POST /api/contracts/upload — rate limiting', () => {
+  it('returns 429 with correct error and Retry-After header when rate limit is exceeded', async () => {
+    consumeRateLimitMock.mockReturnValueOnce({
+      allowed: false,
+      limit: 10,
+      remaining: 0,
+      resetAt: Date.now() + 60 * 60 * 1000,
+      retryAfterSeconds: 3600,
+    })
+
+    const form = new FormData()
+    form.set('title', 'Rate Limited Contract')
+    const blob = new Blob(['plain text contract'], { type: 'text/plain' })
+    const file = new File([blob], 'contract.txt', { type: 'text/plain' })
+    form.set('file', file)
+    const req = new NextRequest('http://localhost/api/contracts/upload', {
+      method: 'POST',
+      body: form,
+    })
+
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(429)
+    expect(body.error).toBe('Too many uploads. Please try again later.')
+    expect(res.headers.get('Retry-After')).not.toBeNull()
   })
 })

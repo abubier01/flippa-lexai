@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
+import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024   // 10 MB — matches client validation
 const MAX_TEXT_CHARS = 50_000              // ~50 KB raw text, ~12 pages of contract
@@ -24,6 +25,19 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const ip = getClientIp(req)
+    const limitResult = consumeRateLimit({
+      key: `upload:${user.id}:${ip}`,
+      limit: 10,
+      windowMs: 60 * 60 * 1000,  // 1 hour
+    })
+    if (!limitResult.allowed) {
+      return NextResponse.json(
+        { error: 'Too many uploads. Please try again later.' },
+        { status: 429, headers: rateLimitHeaders(limitResult) }
+      )
+    }
 
     // Fetch user profile and check plan limits
     const { data: profile } = await supabase
