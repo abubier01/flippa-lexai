@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
 
+const MAX_FILE_BYTES = 10 * 1024 * 1024   // 10 MB — matches client validation
+const MAX_TEXT_CHARS = 50_000              // ~50 KB raw text, ~12 pages of contract
+
 // Dynamic import for server-side document parsing
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   const pdfParse = (await import('pdf-parse')).default
@@ -63,6 +66,19 @@ export async function POST(req: NextRequest) {
     const fileName = formData.get('fileName') as string | null
 
     if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
+
+    if (file && file.size > MAX_FILE_BYTES) {
+      return NextResponse.json(
+        { error: 'File too large. Maximum size is 10 MB.' },
+        { status: 413 }
+      )
+    }
+    if (text && text.length > MAX_TEXT_CHARS) {
+      return NextResponse.json(
+        { error: `Text too long. Maximum is ${MAX_TEXT_CHARS.toLocaleString()} characters (~12 pages). For longer contracts, please upload the PDF.` },
+        { status: 413 }
+      )
+    }
 
     let rawText = ''
     let actualFileName = ''
@@ -148,7 +164,15 @@ export async function POST(req: NextRequest) {
       contracts_this_month: contractsThisMonth + 1,
     }).eq('id', user.id)
 
-    return NextResponse.json({ id: contract.id })
+    const headers: Record<string, string> = {}
+    // TODO: 12000 is duplicated from analyze/route.ts:57. Extract to a shared
+    // constant in lib/llm/limits.ts (e.g., ANALYZE_TRUNCATION_CHARS) so this
+    // header stays in sync if the analyzer window changes. Out of scope for this
+    // PR — file the cleanup as a follow-up.
+    if (rawText.length > 12000) {
+      headers['X-Lexai-Truncated'] = 'analysis-window-exceeded'
+    }
+    return NextResponse.json({ id: contract.id }, { headers })
   } catch (err) {
     console.error('Upload error:', err)
     return NextResponse.json({ error: 'Failed to upload contract' }, { status: 500 })

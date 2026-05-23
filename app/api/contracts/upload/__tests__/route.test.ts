@@ -187,3 +187,102 @@ describe('POST /api/contracts/upload — DOCX extraction failures', () => {
     expect(body.error).toMatch(/no extractable text/i)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Server-side size cap tests (audit findings #5, partial #12)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a NextRequest whose formData() method is replaced with a stub that
+ * returns a plain-object FormData-alike containing a fake File with the
+ * desired `size` property. This bypasses multipart round-tripping so we can
+ * test boundary conditions without allocating 10+ MB of real memory.
+ */
+function buildFakeFileRequest(sizeBytes: number, fileName = 'big.pdf'): NextRequest {
+  const fakeFile = {
+    name: fileName,
+    size: sizeBytes,
+    type: 'application/pdf',
+    // arrayBuffer should not be called for oversized files (the size guard
+    // fires first), but we stub it in case it is invoked by the 9 MB test.
+    arrayBuffer: () => Promise.resolve(Buffer.from('%PDF-1.4 tiny').buffer),
+    text: () => Promise.resolve(''),
+  }
+
+  const fakeFormData = {
+    get(key: string) {
+      if (key === 'title') return 'Big Contract'
+      if (key === 'file') return fakeFile
+      return null
+    },
+  }
+
+  const req = new NextRequest('http://localhost/api/contracts/upload', {
+    method: 'POST',
+    // Provide a minimal body to satisfy NextRequest construction; formData()
+    // is replaced below before POST() uses it.
+    body: '{}',
+  })
+  // Replace formData() so the route receives our controlled fake.
+  req.formData = () => Promise.resolve(fakeFormData as unknown as FormData)
+  return req
+}
+
+function buildTextRequest(text: string): NextRequest {
+  const form = new FormData()
+  form.set('title', 'Pasted Contract')
+  form.set('text', text)
+  form.set('fileName', 'pasted.txt')
+  return new NextRequest('http://localhost/api/contracts/upload', {
+    method: 'POST',
+    body: form,
+  })
+}
+
+describe('POST /api/contracts/upload — server-side size caps', () => {
+  const ELEVEN_MB = 11 * 1024 * 1024
+  const NINE_MB = 9 * 1024 * 1024
+
+  it('returns 413 for an 11 MB file with "File too large" message', async () => {
+    const res = await POST(buildFakeFileRequest(ELEVEN_MB))
+    const body = await res.json()
+
+    expect(res.status).toBe(413)
+    expect(body.error).toMatch(/file too large/i)
+    expect(body.error).toMatch(/10 MB/i)
+  })
+
+  it('returns 413 for 60,000-character text with "~12 pages" message', async () => {
+    const longText = 'a'.repeat(60_000)
+    const res = await POST(buildTextRequest(longText))
+    const body = await res.json()
+
+    expect(res.status).toBe(413)
+    expect(body.error).toMatch(/text too long/i)
+    expect(body.error).toMatch(/~12 pages/i)
+  })
+
+  it('returns 200 for a 9 MB file (within limit)', async () => {
+    // pdf-parse mock returns 'extracted pdf content' by default
+    const res = await POST(buildFakeFileRequest(NINE_MB))
+
+    expect(res.status).toBe(200)
+  })
+
+  it('returns 200 with X-Lexai-Truncated header for 30,000-character text', async () => {
+    // 30,000 chars is within the 50K limit but exceeds the 12K analyzer window
+    const longText = 'a'.repeat(30_000)
+    const res = await POST(buildTextRequest(longText))
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('X-Lexai-Truncated')).toBe('analysis-window-exceeded')
+  })
+
+  it('returns 200 without X-Lexai-Truncated header for 5,000-character text', async () => {
+    const shortText = 'a'.repeat(5_000)
+    const res = await POST(buildTextRequest(shortText))
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('X-Lexai-Truncated')).toBeNull()
+  })
+})
