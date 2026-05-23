@@ -145,11 +145,11 @@ export default function AboutPage() {
       {/* CTA */}
       <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
         <h2 className="text-3xl font-bold text-foreground mb-4 text-balance">Ready to try it?</h2>
-        <p className="text-muted-foreground mb-8">Analyze your first contract free — no credit card required.</p>
+        <p className="text-muted-foreground mb-8">Analyze your first contract with Solo at $1/month.</p>
         <div className="flex items-center justify-center gap-4 flex-wrap">
           <Button asChild size="lg">
             <Link href="/auth/sign-up">
-              Get started free <ArrowRight className="w-4 h-4 ml-1.5" />
+              Get started with Solo <ArrowRight className="w-4 h-4 ml-1.5" />
             </Link>
           </Button>
           <Button asChild variant="outline" size="lg">

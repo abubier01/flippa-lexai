@@ -1,15 +1,12 @@
 // POST /api/team/invite — send an invite to an email
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { hasTeamAccess } from '@/lib/plan/access'
+import { assertHasFeature, hasTeamAccess, PlanGateError } from '@/lib/plan/access'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 function serviceRole() {
   // Service role is required: invite creation/lookup and team roster checks span rows not all owned by the requester.
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  return createAdminClient()
 }
 
 export async function POST(req: NextRequest) {
@@ -20,11 +17,21 @@ export async function POST(req: NextRequest) {
   const { email } = await req.json()
   if (!email?.trim()) return NextResponse.json({ error: 'Email is required.' }, { status: 400 })
 
+  try {
+    await assertHasFeature(user.id, 'sharedLibrary')
+  } catch (err) {
+    if (err instanceof PlanGateError) {
+      return NextResponse.json({ error: err.message, feature: err.feature }, { status: 403 })
+    }
+    console.error('[invite] feature gate error:', err)
+    return NextResponse.json({ error: 'Failed to validate team access.' }, { status: 500 })
+  }
+
   const service = serviceRole()
 
   const { data: profile } = await service
     .from('profiles')
-    .select('plan, team_id')
+    .select('team_id')
     .eq('id', user.id)
     .single()
 

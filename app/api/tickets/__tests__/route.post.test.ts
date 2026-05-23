@@ -15,8 +15,8 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: mocks.createClient,
 }))
 
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: mocks.createServiceClient,
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: mocks.createServiceClient,
 }))
 
 vi.mock('server-only', () => ({}))

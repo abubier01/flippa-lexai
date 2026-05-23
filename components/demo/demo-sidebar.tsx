@@ -63,7 +63,7 @@ export default function DemoSidebar() {
             <Button asChild size="sm" className="w-full h-7 text-xs">
               <Link href="/auth/sign-up">
                 <Zap className="w-3 h-3 mr-1" />
-                Get started free
+                Get started with Solo
               </Link>
             </Button>
           </div>

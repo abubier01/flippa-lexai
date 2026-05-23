@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/dashboard/sidebar'
 import Header from '@/components/dashboard/header'
+import DunningBanner from '@/components/billing/dunning-banner'
 
 export default async function TeamLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -20,6 +21,7 @@ export default async function TeamLayout({ children }: { children: React.ReactNo
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header user={user} profile={profile} />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <DunningBanner />
           {children}
         </main>
       </div>

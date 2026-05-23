@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import JoinTeamClient from './join-client'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export default async function JoinTeamPage({
   searchParams,
@@ -16,10 +16,7 @@ export default async function JoinTeamPage({
   if (!user) redirect(`/auth/login?next=/team/join?token=${token}`)
 
   // Service role is required: invite lookup must work before membership exists, and invite rows are not user-owned.
-  const serviceSupabase = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const serviceSupabase = createAdminClient()
   const { data: invite } = await serviceSupabase
     .from('team_invites')
     .select('*, teams:team_id(name)')

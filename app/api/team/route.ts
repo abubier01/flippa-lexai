@@ -2,15 +2,33 @@
 // POST /api/team — create a new team (team plan only)
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { hasTeamAccess } from '@/lib/plan/access'
+import { assertHasFeature, hasTeamAccess, PlanGateError } from '@/lib/plan/access'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 function serviceRole() {
   // Service role is required: team API performs owner-scoped writes and cross-member/profile reads beyond caller-bound RLS scope.
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  return createAdminClient()
+}
+
+async function enforceSharedLibraryFeature(
+  userId: string,
+  access: { via: 'own' | 'membership' | null; teamId: string | null },
+  service: any,
+) {
+  if (access.via === 'own') {
+    await assertHasFeature(userId, 'sharedLibrary')
+    return
+  }
+  if (access.via === 'membership' && access.teamId) {
+    const { data: team } = await service
+      .from('teams')
+      .select('owner_id')
+      .eq('id', access.teamId)
+      .single()
+    const ownerId = (team as { owner_id?: string } | null)?.owner_id
+    if (!ownerId) throw new Error('Team owner is missing.')
+    await assertHasFeature(ownerId, 'sharedLibrary')
+  }
 }
 
 export async function GET() {
@@ -26,6 +44,15 @@ export async function GET() {
   const teamId = access.teamId
 
   const service = serviceRole()
+  try {
+    await enforceSharedLibraryFeature(user.id, access, service)
+  } catch (err) {
+    if (err instanceof PlanGateError) {
+      return NextResponse.json({ error: err.message, feature: err.feature }, { status: 403 })
+    }
+    console.error('[team] feature gate error:', err)
+    return NextResponse.json({ error: 'Failed to validate team access.' }, { status: 500 })
+  }
 
   const [teamRes, membersRes, invitesRes] = await Promise.all([
     service.from('teams').select('*').eq('id', teamId).single(),
@@ -39,7 +66,7 @@ export async function GET() {
     ? await service.from('profiles').select('id, full_name, plan').in('id', userIds)
     : { data: [] as { id: string; full_name: string | null; plan: string }[] }
   const profileMap = Object.fromEntries((profileRows || []).map((p: { id: string; full_name: string | null; plan: string }) => [p.id, p]))
-  const members = rawMembers.map(m => ({ ...m, profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'free' } }))
+  const members = rawMembers.map(m => ({ ...m, profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'solo' } }))
 
   return NextResponse.json({
     team: teamRes.data,
@@ -58,6 +85,16 @@ export async function POST(req: NextRequest) {
     .select('team_id')
     .eq('id', user.id)
     .single()
+
+  try {
+    await assertHasFeature(user.id, 'sharedLibrary')
+  } catch (err) {
+    if (err instanceof PlanGateError) {
+      return NextResponse.json({ error: err.message, feature: err.feature }, { status: 403 })
+    }
+    console.error('[team] feature gate error:', err)
+    return NextResponse.json({ error: 'Failed to validate team access.' }, { status: 500 })
+  }
 
   const access = await hasTeamAccess(user.id)
   if (!access.ok || access.via !== 'own') {

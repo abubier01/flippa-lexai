@@ -5,6 +5,16 @@ const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
   createServiceClient: vi.fn(),
   hasTeamAccess: vi.fn(),
+  assertHasFeature: vi.fn(),
+  PlanGateError: class PlanGateError extends Error {
+    feature: string
+    tier: string
+    constructor(feature: string, tier: string) {
+      super(`${feature} denied on ${tier}`)
+      this.feature = feature
+      this.tier = tier
+    }
+  },
   serviceFrom: vi.fn(),
   state: {
     userId: 'user_1',
@@ -76,18 +86,21 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: mocks.createClient,
 }))
 
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: mocks.createServiceClient,
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: mocks.createServiceClient,
 }))
 
 vi.mock('@/lib/plan/access', () => ({
   hasTeamAccess: mocks.hasTeamAccess,
+  assertHasFeature: mocks.assertHasFeature,
+  PlanGateError: mocks.PlanGateError,
 }))
 
 describe('GET /api/team entitlement enforcement', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.state.userId = 'user_1'
+    mocks.assertHasFeature.mockResolvedValue({ tier: 'team', status: 'active' })
     mocks.createClient.mockResolvedValue({
       auth: {
         getUser: async () => ({

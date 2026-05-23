@@ -5,6 +5,7 @@ import { generateText } from 'ai'
 import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { requireActiveSubscriptionForApi } from '@/lib/plan/api-entitlement'
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,6 +18,8 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const gate = await requireActiveSubscriptionForApi(user.id)
+    if (gate) return gate
 
     const ip = getClientIp(req)
     const limitResult = await consumeRateLimit({

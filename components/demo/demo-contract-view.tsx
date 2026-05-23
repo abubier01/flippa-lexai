@@ -15,7 +15,7 @@ type Analysis = typeof DEMO_ANALYSES[string]
 type Message = { id: string; role: 'user' | 'assistant'; content: string; created_at: string }
 
 const RISK_DEMO_REPLIES: Record<string, string> = {
-  default: "That's a great question about this contract. In a full LexAI account, I would analyse the specific clause you're asking about and provide detailed guidance, suggested redlines, and comparable market standards. Sign up free to unlock the full AI chat on your own contracts.",
+  default: "That's a great question about this contract. In a full LexAI account, I would analyse the specific clause you're asking about and provide detailed guidance, suggested redlines, and comparable market standards. Sign up for Solo to unlock the full AI chat on your own contracts.",
 }
 
 function RiskIcon({ severity }: { severity: string }) {
@@ -349,7 +349,7 @@ export default function DemoContractView({ contract, analysis, initialMessages }
                 Full AI chat is available on real contracts after sign-up.
               </p>
               <Link href="/auth/sign-up" className="text-xs font-semibold text-primary hover:underline whitespace-nowrap">
-                Sign up free
+                Sign up for Solo
               </Link>
             </div>
           )}

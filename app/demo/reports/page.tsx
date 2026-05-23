@@ -94,7 +94,7 @@ export default function DemoReportsPage() {
           <p className="text-sm text-muted-foreground mt-0.5">Sign up to export PDF reports, track risk trends, and compare contracts side by side.</p>
         </div>
         <Button asChild className="shrink-0">
-          <Link href="/auth/sign-up">Get started free</Link>
+          <Link href="/auth/sign-up">Get started with Solo</Link>
         </Button>
       </div>
     </div>

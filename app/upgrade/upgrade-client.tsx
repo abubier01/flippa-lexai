@@ -67,7 +67,9 @@ export default function UpgradePageClient({ product, currentPlan }: Props) {
               <h1 className="text-2xl font-bold text-foreground">
                 ${price}<span className="text-base font-normal text-muted-foreground">/month</span>
               </h1>
-              <p className="text-sm text-muted-foreground mt-1">One-time payment for one month of access.</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                ${price} billed monthly. Cancel any time from settings.
+              </p>
             </div>
 
             <div className="bg-card rounded-xl border border-border p-5">
@@ -86,7 +88,13 @@ export default function UpgradePageClient({ product, currentPlan }: Props) {
 
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Shield className="w-3.5 h-3.5 shrink-0" />
-              <span>Secured by Stripe. Your payment info is never stored on our servers.</span>
+              <span>
+                Secured by Stripe. Your payment info is never stored on our servers. Manage subscription in{' '}
+                <Link href="/api/stripe/portal" className="underline hover:text-foreground">
+                  billing portal
+                </Link>
+                .
+              </span>
             </div>
           </div>
 

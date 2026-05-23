@@ -37,7 +37,7 @@ export default function LandingHero() {
           <div className="mt-10 flex flex-col sm:flex-row items-center gap-4">
             <Button size="lg" className="h-12 px-8 text-base" asChild>
               <Link href="/auth/sign-up">
-                Start for free
+                Start with Solo
                 <ArrowRight className="ml-2 w-4 h-4" />
               </Link>
             </Button>

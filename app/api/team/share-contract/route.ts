@@ -1,15 +1,12 @@
 // POST /api/team/share-contract — toggle sharing a contract with the team
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { hasTeamAccess } from '@/lib/plan/access'
+import { assertHasFeature, hasTeamAccess, PlanGateError } from '@/lib/plan/access'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 function serviceRole() {
   // Service role is required: toggling team sharing updates contract visibility fields that can be blocked by current RLS update policies.
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  return createAdminClient()
 }
 
 export async function POST(req: NextRequest) {
@@ -22,13 +19,36 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan, team_id')
+    .select('team_id')
     .eq('id', user.id)
     .single()
 
   const access = await hasTeamAccess(user.id)
   if (!access.ok || !profile?.team_id) {
     return NextResponse.json({ error: 'Team plan required.' }, { status: 403 })
+  }
+
+  try {
+    if (access.via === 'own') {
+      await assertHasFeature(user.id, 'sharedLibrary')
+    } else {
+      const service = serviceRole()
+      const { data: team } = await service
+        .from('teams')
+        .select('owner_id')
+        .eq('id', profile.team_id)
+        .single()
+      if (!team?.owner_id) {
+        return NextResponse.json({ error: 'Team owner is missing.' }, { status: 500 })
+      }
+      await assertHasFeature(team.owner_id, 'sharedLibrary')
+    }
+  } catch (err) {
+    if (err instanceof PlanGateError) {
+      return NextResponse.json({ error: err.message, feature: err.feature }, { status: 403 })
+    }
+    console.error('[share-contract] feature gate error:', err)
+    return NextResponse.json({ error: 'Failed to validate team access.' }, { status: 500 })
   }
 
   // Verify contract belongs to user (use auth client — RLS protects this correctly)

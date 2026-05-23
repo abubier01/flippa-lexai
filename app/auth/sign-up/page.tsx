@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
 const perks = [
-  '5 free contract analyses every month',
+  '5 contract analyses every month on Solo',
   'AI-powered risk detection',
   'Plain-English summaries',
   'Secure & private by default',
@@ -28,12 +28,14 @@ export default function SignUpPage() {
     e.preventDefault()
     setLoading(true)
     const supabase = createClient()
+    const requiresSubscription = process.env.NEXT_PUBLIC_REQUIRE_SUBSCRIPTION === 'true'
+    const defaultRedirectPath = requiresSubscription ? '/onboarding/subscribe' : '/dashboard'
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { full_name: fullName },
-        emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
+        emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}${defaultRedirectPath}`,
       },
     })
     if (error) {
@@ -87,7 +89,7 @@ export default function SignUpPage() {
 
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-foreground mb-1">Create your account</h1>
-            <p className="text-muted-foreground text-sm">Free plan — no credit card required</p>
+            <p className="text-muted-foreground text-sm">Solo plan — $1/month</p>
           </div>
 
           <form onSubmit={handleSignUp} className="flex flex-col gap-5">
@@ -132,7 +134,7 @@ export default function SignUpPage() {
             </div>
 
             <Button type="submit" className="w-full h-10" disabled={loading}>
-              {loading ? 'Creating account…' : 'Create free account'}
+              {loading ? 'Creating account…' : 'Create Solo account'}
             </Button>
           </form>
 

@@ -17,6 +17,9 @@ export function getStripe(): Stripe {
   }
 
   if (!stripeClient) {
+    // Reviewed 2026-05-23. Next review: 2026-08-23 (quarterly).
+    // Keep this pin at the latest API version supported by the installed stripe-node SDK major.
+    // See docs/runbooks/stripe-api-version-review.md before changing this value.
     stripeClient = new Stripe(stripeKey, {
       apiVersion: '2025-02-24.acacia',
     })

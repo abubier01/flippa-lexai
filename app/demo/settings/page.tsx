@@ -72,12 +72,12 @@ export default function DemoSettingsPage() {
         <div>
           <p className="font-semibold text-foreground">Create an account to manage settings</p>
           <p className="text-sm text-muted-foreground mt-1">
-            Sign up free to set up your profile, manage billing, and configure your preferences.
+            Sign up for Solo to set up your profile, manage billing, and configure your preferences.
           </p>
         </div>
         <div className="flex gap-3 justify-center">
           <Button asChild>
-            <Link href="/auth/sign-up">Create free account</Link>
+            <Link href="/auth/sign-up">Create Solo account</Link>
           </Button>
           <Button variant="outline" asChild>
             <Link href="/auth/login">Log in</Link>

@@ -1,10 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import TeamDashboard from '@/components/team/team-dashboard'
 import { hasTeamAccess } from '@/lib/plan/access'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export default async function TeamPage() {
   // Use user auth client only for getUser() — all DB reads use service role to bypass RLS
@@ -13,10 +13,7 @@ export default async function TeamPage() {
   if (!user) redirect('/auth/login')
 
   // Service role is required: this page aggregates cross-user team/membership data that member RLS may not expose uniformly.
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const service = createAdminClient()
 
   const { data: profile } = await service
     .from('profiles')
@@ -24,7 +21,7 @@ export default async function TeamPage() {
     .eq('id', user.id)
     .single()
 
-  // Check team access via subscription + membership (team members have plan='free'
+  // Check team access via subscription + membership (team members have plan='solo'
   // but should still see the team page when the team owner has an active team plan).
   const access = await hasTeamAccess(user.id)
   if (!access.ok) {
@@ -80,7 +77,7 @@ export default async function TeamPage() {
     team = teamRes.data
     members = rawMembers.map(m => ({
       ...m,
-      profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'free' },
+      profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'solo' },
     }))
     invites = invitesRes.data || []
     sharedContracts = contractsRes.data || []

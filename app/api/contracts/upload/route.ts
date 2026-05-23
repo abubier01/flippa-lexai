@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
+import { requireActiveSubscriptionForApi } from '@/lib/plan/api-entitlement'
 
 // Dynamic import for server-side document parsing
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
@@ -31,11 +32,13 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const gate = await requireActiveSubscriptionForApi(user.id)
+    if (gate) return gate
 
     // Fetch user profile and check plan limits
     const { data: profile } = await supabase
       .from('profiles')
-      .select('plan, contracts_this_month, usage_reset_at')
+      .select('contracts_this_month, usage_reset_at')
       .eq('id', user.id)
       .single()
 

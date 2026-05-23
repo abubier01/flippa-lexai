@@ -55,7 +55,7 @@ export async function handleSubscriptionUpserted(
   // Sync the denormalized profiles.plan based on subscription health.
   const planForProfile = (sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due')
     ? plan
-    : 'free'
+    : 'solo'
   const { error: profileError } = await supabase
     .from('profiles')
     .update({ plan: planForProfile })

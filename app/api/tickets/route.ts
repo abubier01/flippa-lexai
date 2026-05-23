@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // POST /api/tickets — submit a new support ticket (public, no auth required)
 export async function POST(req: NextRequest) {
@@ -70,10 +70,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   // Service role is required: public/anonymous ticket intake must bypass RLS to insert support rows.
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const service = createAdminClient()
 
   const { data: ticket, error } = await service
     .from('support_tickets')

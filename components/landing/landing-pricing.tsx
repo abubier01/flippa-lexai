@@ -3,16 +3,21 @@ import { Button } from '@/components/ui/button'
 import { Check } from 'lucide-react'
 import { PRODUCTS } from '@/lib/products'
 
-// Prices come from PRODUCTS which reads PRICE_PRO_CENTS / PRICE_TEAM_CENTS env vars
+// Prices come from PRODUCTS which reads PRICE_SOLO_CENTS / PRICE_PRO_CENTS / PRICE_TEAM_CENTS env vars
+function periodLabel(billing: string) {
+  return billing.startsWith('per ') ? billing.slice(4) : billing
+}
+
 function buildPlans() {
+  const solo = PRODUCTS.find(p => p.plan === 'solo')!
   const pro = PRODUCTS.find(p => p.plan === 'pro')!
   const team = PRODUCTS.find(p => p.plan === 'team')!
   return [
     {
-      name: 'Free',
-      price: '$0',
-      period: 'forever',
-      description: 'Perfect for individuals getting started.',
+      name: solo.name,
+      price: `$${(solo.priceInCents / 100).toFixed(0)}`,
+      period: periodLabel(solo.billing),
+      description: 'For solo operators who need fast contract clarity.',
       features: ['5 contract analyses / month', 'AI chat (20 messages/contract)', 'PDF & DOCX support', 'Risk scoring', 'Email support'],
       cta: 'Get started',
       href: '/auth/sign-up',
@@ -21,7 +26,7 @@ function buildPlans() {
     {
       name: pro.name,
       price: `$${(pro.priceInCents / 100).toFixed(0)}`,
-      period: pro.billing,
+      period: periodLabel(pro.billing),
       description: 'For professionals who review contracts regularly.',
       features: ['Unlimited contract analyses', 'Unlimited AI chat', 'All file formats', 'Advanced risk breakdown', 'Clause extraction', 'Priority support', 'Export reports (PDF)'],
       cta: 'Start Pro trial',
@@ -31,7 +36,7 @@ function buildPlans() {
     {
       name: team.name,
       price: `$${(team.priceInCents / 100).toFixed(0)}`,
-      period: team.billing,
+      period: periodLabel(team.billing),
       description: 'For legal teams and growing businesses.',
       features: ['Everything in Pro', 'Up to 10 team members', 'Shared contract library', 'Team analytics dashboard', 'SSO & SAML', 'Dedicated account manager', 'Custom integrations'],
       cta: 'Get started',

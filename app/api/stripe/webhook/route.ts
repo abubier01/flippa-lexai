@@ -12,6 +12,8 @@ import { handleSubscriptionUpserted } from '@/lib/stripe/handlers/subscription-u
 import { handleSubscriptionDeleted } from '@/lib/stripe/handlers/subscription-deleted'
 import { handleInvoicePaymentFailed } from '@/lib/stripe/handlers/invoice-payment-failed'
 import { handleInvoicePaymentSucceeded } from '@/lib/stripe/handlers/invoice-payment-succeeded'
+import { handleChargeRefunded } from '@/lib/stripe/handlers/charge-refunded'
+import { log } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,7 +25,7 @@ export async function POST(req: NextRequest) {
   }
   const secret = process.env.STRIPE_WEBHOOK_SECRET
   if (!secret) {
-    console.error('[stripe-webhook] STRIPE_WEBHOOK_SECRET is not set')
+    log.error('stripe-webhook', 'STRIPE_WEBHOOK_SECRET is not set')
     return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
   }
 
@@ -34,7 +36,7 @@ export async function POST(req: NextRequest) {
     event = stripe.webhooks.constructEvent(body, sig, secret)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'invalid signature'
-    console.warn('[stripe-webhook] signature verification failed:', message)
+    log.warn('stripe-webhook', 'signature verification failed', { err, message })
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
@@ -44,7 +46,7 @@ export async function POST(req: NextRequest) {
     const claim = await tryClaimEvent(event.id, event.type, userId, event as unknown)
     claimState = claim.state
   } catch (err) {
-    console.error('[stripe-webhook] claim failed:', event.id, err)
+    log.error('stripe-webhook', 'claim failed', { err, eventId: event.id, eventType: event.type })
     return NextResponse.json({ error: 'Claim failed' }, { status: 500 })
   }
   if (claimState === 'already_processed') {
@@ -74,6 +76,10 @@ export async function POST(req: NextRequest) {
       case 'invoice.payment_succeeded':
         await handleInvoicePaymentSucceeded(event)
         break
+      case 'charge.refunded':
+      case 'charge.dispute.created':
+        await handleChargeRefunded(event)
+        break
       default:
         // Ignored by design — still mark processed so we never retry it.
         break
@@ -82,7 +88,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'handler failed'
-    console.error('[stripe-webhook] handler error:', event.id, event.type, message)
+    log.error('stripe-webhook', 'handler error', {
+      err,
+      eventId: event.id,
+      eventType: event.type,
+      message,
+    })
     await markEventFailed(event.id, message)
     return NextResponse.json({ error: 'Handler failed' }, { status: 500 })
   }

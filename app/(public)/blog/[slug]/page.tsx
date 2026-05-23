@@ -182,12 +182,12 @@ export default async function BlogPostPage({ params }: Props) {
             <BookOpen className="w-6 h-6 text-primary" />
           </div>
           <h3 className="text-2xl font-bold text-foreground mb-3 text-balance">Analyze contracts with AI</h3>
-          <p className="text-muted-foreground mb-7 text-pretty">Upload your next contract and get a full risk analysis in seconds — free.</p>
+          <p className="text-muted-foreground mb-7 text-pretty">Upload your next contract and get a full risk analysis in seconds with Solo.</p>
           <Link
             href="/auth/sign-up"
             className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
           >
-            Get started free
+            Get started with Solo
           </Link>
         </div>
       </div>

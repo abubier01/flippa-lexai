@@ -66,13 +66,13 @@ export default function DemoUploadPage() {
               <p className="text-sm font-semibold">Sign up to unlock your real analysis</p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Create a free account to upload your own contracts and get full AI-powered risk breakdowns, key term extraction, and clause-level chat.
+              Create a Solo account to upload your own contracts and get full AI-powered risk breakdowns, key term extraction, and clause-level chat.
             </p>
           </div>
           <div className="flex gap-3">
             <Button asChild>
               <Link href="/auth/sign-up">
-                Get started free
+                Get started with Solo
                 <ArrowRight className="w-4 h-4 ml-1.5" />
               </Link>
             </Button>
@@ -165,7 +165,7 @@ export default function DemoUploadPage() {
         <div>
           <p className="text-sm font-medium text-foreground">Demo mode</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Uploaded files are not saved or processed in demo mode. <Link href="/auth/sign-up" className="text-primary hover:underline font-medium">Sign up free</Link> to analyse your real contracts.
+            Uploaded files are not saved or processed in demo mode. <Link href="/auth/sign-up" className="text-primary hover:underline font-medium">Sign up for Solo</Link> to analyse your real contracts.
           </p>
         </div>
       </div>

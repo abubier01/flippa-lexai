@@ -1,10 +1,32 @@
 import 'server-only'
-import type { PlanType } from '@/lib/plan-limits'
+import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { decideActivePlan, type ActivePlan } from './access-logic'
 
 export { decideActivePlan, GRACE_PERIOD_DAYS } from './access-logic'
 export type { ActivePlan, SubscriptionRow } from './access-logic'
+
+export type Feature =
+  | 'exportPdf'
+  | 'sharedLibrary'
+  | 'sso'
+  | 'clauseExtraction'
+  | 'advancedRiskBreakdown'
+
+const FEATURE_LABELS: Record<Feature, string> = {
+  exportPdf: 'Export PDF',
+  sharedLibrary: 'Shared library',
+  sso: 'SSO',
+  clauseExtraction: 'Clause extraction',
+  advancedRiskBreakdown: 'Advanced risk breakdown',
+}
+
+export class PlanGateError extends Error {
+  constructor(public feature: Feature, public tier: PlanType) {
+    super(`${FEATURE_LABELS[feature]} is not available on the ${tier} plan.`)
+    this.name = 'PlanGateError'
+  }
+}
 
 function service() {
   // Service role is required: entitlement checks resolve subscription/team state across arbitrary users (owner + members).
@@ -38,9 +60,20 @@ export async function assertPaidPlan(
   minTier: PlanType,
 ): Promise<ActivePlan> {
   const active = await getActivePlan(userId)
-  const order: Record<PlanType, number> = { free: 0, pro: 1, team: 2 }
+  const order: Record<PlanType, number> = { solo: 0, pro: 1, team: 2 }
   if (order[active.tier] < order[minTier]) {
     throw new Error(`Requires ${minTier} plan; user is on ${active.tier} (${active.status})`)
+  }
+  return active
+}
+
+export async function assertHasFeature(
+  userId: string,
+  feature: Feature,
+): Promise<ActivePlan> {
+  const active = await getActivePlan(userId)
+  if (!PLAN_LIMITS[active.tier].features[feature]) {
+    throw new PlanGateError(feature, active.tier)
   }
   return active
 }

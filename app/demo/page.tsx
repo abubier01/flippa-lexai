@@ -49,11 +49,11 @@ export default function DemoDashboardPage() {
           </div>
           <div>
             <p className="text-sm font-medium text-foreground">Enjoying the demo?</p>
-            <p className="text-xs text-muted-foreground">Sign up free and analyse your first real contract in under 30 seconds.</p>
+            <p className="text-xs text-muted-foreground">Sign up for Solo and analyse your first real contract in under 30 seconds.</p>
           </div>
         </div>
         <Button asChild size="sm">
-          <Link href="/auth/sign-up">Create free account</Link>
+          <Link href="/auth/sign-up">Create Solo account</Link>
         </Button>
       </div>
 

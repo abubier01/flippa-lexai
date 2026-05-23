@@ -10,9 +10,19 @@ export interface Product {
 }
 
 // Server-side source of truth — prices come from env vars so they can be changed without code changes.
+// PRICE_SOLO_CENTS — e.g. 100   ($1/month)
 // PRICE_PRO_CENTS  — e.g. 2900  ($29/month)
 // PRICE_TEAM_CENTS — e.g. 9900  ($99/month)
+// All prices are USD. International currency and Stripe Tax localization are out of scope until we sell outside the US.
 export const PRODUCTS: Product[] = [
+  {
+    id: 'lexai-solo',
+    plan: 'solo',
+    name: 'LexAI Solo',
+    description: '5 contract analyses per month, AI chat (20 messages per contract), and core risk scoring for solo operators.',
+    priceInCents: parseInt(process.env.PRICE_SOLO_CENTS ?? '100', 10),
+    billing: 'per month',
+  },
   {
     id: 'lexai-pro',
     plan: 'pro',

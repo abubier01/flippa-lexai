@@ -15,7 +15,7 @@ export default function LandingCTA() {
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button size="lg" variant="secondary" className="h-12 px-8 text-base" asChild>
             <Link href="/auth/sign-up">
-              Get started for free
+              Get started with Solo
               <ArrowRight className="ml-2 w-4 h-4" />
             </Link>
           </Button>
@@ -23,7 +23,7 @@ export default function LandingCTA() {
             <Link href="/auth/login">Sign in to your account</Link>
           </Button>
         </div>
-        <p className="mt-6 text-sm text-primary-foreground/60">No credit card required. Free plan includes 5 analyses/month.</p>
+        <p className="mt-6 text-sm text-primary-foreground/60">Solo includes 5 analyses/month at $1/mo.</p>
       </div>
     </section>
   )

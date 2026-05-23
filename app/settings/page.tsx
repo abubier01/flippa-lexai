@@ -20,7 +20,7 @@ export default function SettingsPage() {
   const [pwNew, setPwNew] = useState('')
   const [pwConfirm, setPwConfirm] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
-  const [currentPlan, setCurrentPlan] = useState<PlanType>('free')
+  const [currentPlan, setCurrentPlan] = useState<PlanType>('solo')
   const [contractsUsed, setContractsUsed] = useState(0)
   useEffect(() => {
     const supabase = createClient()
@@ -34,7 +34,7 @@ export default function SettingsPage() {
           .eq('id', data.user.id)
           .single()
         if (profile) {
-          setCurrentPlan((profile.plan || 'free') as PlanType)
+          setCurrentPlan((profile.plan || 'solo') as PlanType)
           setContractsUsed(profile.contracts_this_month || 0)
         }
       }
@@ -125,10 +125,10 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-accent text-primary border border-primary/20">
                 <Shield className="w-3 h-3" />
-                {PLAN_LIMITS[currentPlan]?.name || 'Free'} Plan
+                {PLAN_LIMITS[currentPlan]?.name || 'Solo'} Plan
               </span>
               <span className="text-xs text-muted-foreground">
-                {currentPlan === 'free' ? `${contractsUsed}/5 analyses used this month` : 'Unlimited analyses'}
+                {currentPlan === 'solo' ? `${contractsUsed}/5 analyses used this month` : 'Unlimited analyses'}
               </span>
             </div>
           </div>
@@ -237,24 +237,20 @@ export default function SettingsPage() {
                 Current plan: {PLAN_LIMITS[currentPlan]?.name}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {currentPlan === 'free' && `${contractsUsed} of 5 contract analyses used this month`}
+                {currentPlan === 'solo' && `${contractsUsed} of 5 contract analyses used this month`}
                 {currentPlan === 'pro' && 'Unlimited contract analyses · Unlimited AI chat'}
                 {currentPlan === 'team' && 'Unlimited everything · Up to 10 team members'}
               </p>
             </div>
-            {currentPlan === 'free' ? (
-              <span className="text-sm font-bold text-muted-foreground">$0/mo</span>
-            ) : (
-              <span className="text-sm font-bold text-foreground">
-                {(() => {
-                  const p = PRODUCTS.find(x => x.plan === currentPlan)
-                  return p ? `$${(p.priceInCents / 100).toFixed(0)}/mo` : ''
-                })()}
-              </span>
-            )}
+            <span className="text-sm font-bold text-foreground">
+              {(() => {
+                const p = PRODUCTS.find(x => x.plan === currentPlan)
+                return p ? `$${(p.priceInCents / 100).toFixed(0)}/mo` : ''
+              })()}
+            </span>
           </div>
 
-          {currentPlan !== 'free' && (
+          {currentPlan !== 'solo' && (
             <Button
               size="sm"
               variant="outline"
@@ -274,12 +270,9 @@ export default function SettingsPage() {
 
           {/* Plan cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {PRODUCTS.map(product => {
+            {PRODUCTS.filter(product => product.plan !== 'solo').map(product => {
               const isCurrentPlan = currentPlan === product.plan
-              const isDowngrade =
-                (currentPlan === 'team' && product.plan === 'pro') ||
-                (currentPlan === 'pro' && product.plan === 'pro') ||
-                (currentPlan === 'team' && product.plan === 'team')
+              const isDowngrade = currentPlan === 'team' && product.plan === 'pro'
               const price = (product.priceInCents / 100).toFixed(0)
               const features = product.plan === 'pro'
                 ? ['Unlimited analyses', 'Unlimited AI chat', 'Clause extraction', 'Export PDF']
@@ -321,7 +314,7 @@ export default function SettingsPage() {
                     </Button>
                   ) : isDowngrade ? (
                     <Button size="sm" variant="outline" disabled className="w-full text-muted-foreground">
-                      Already included
+                      Downgrade in portal
                     </Button>
                   ) : (
                     <Button asChild size="sm" className="w-full">

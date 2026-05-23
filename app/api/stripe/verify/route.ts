@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripe } from '@/lib/stripe'
+import { withRetry } from '@/lib/stripe/with-retry'
 import type { PlanType } from '@/lib/plan-limits'
 
-const TIER_ORDER: Record<PlanType, number> = { free: 0, pro: 1, team: 2 }
+const TIER_ORDER: Record<PlanType, number> = { solo: 0, pro: 1, team: 2 }
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
     const { sessionId } = await req.json()
     if (!sessionId) return NextResponse.json({ error: 'Session ID required' }, { status: 400 })
 
-    const session = await stripe.checkout.sessions.retrieve(sessionId)
+    const session = await withRetry(() => stripe.checkout.sessions.retrieve(sessionId))
     if (session.payment_status !== 'paid') {
       return NextResponse.json({ error: 'Payment not completed' }, { status: 402 })
     }
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
       .select('plan')
       .eq('id', user.id)
       .single()
-    const currentTier = TIER_ORDER[(profile?.plan as PlanType) ?? 'free']
+    const currentTier = TIER_ORDER[(profile?.plan as PlanType) ?? 'solo']
     if (TIER_ORDER[plan] < currentTier) {
       return NextResponse.json(
         { error: 'Cannot downgrade via checkout. Use the billing portal.' },

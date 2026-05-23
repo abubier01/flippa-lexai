@@ -34,8 +34,8 @@ export default function UploadForm() {
       return
     }
     setFile(f)
-    if (!title) setTitle(f.name.replace(/\.[^.]+$/, ''))
-  }, [title])
+    setTitle((current) => current || f.name.replace(/\.[^.]+$/, ''))
+  }, [])
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -106,7 +106,7 @@ export default function UploadForm() {
         </div>
         <h3 className="text-lg font-semibold text-foreground mb-2">Monthly Limit Reached</h3>
         <p className="text-muted-foreground text-sm mb-6 max-w-md mx-auto">
-          You&apos;ve used all 5 contract analyses for this month on the Free plan. 
+          You&apos;ve used all 5 contract analyses for this month on the Solo plan. 
           Upgrade to Pro for unlimited analyses and AI chat.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">

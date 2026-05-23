@@ -2,6 +2,7 @@ import 'server-only'
 import type Stripe from 'stripe'
 import { getStripe } from '@/lib/stripe'
 import { priceIdToPlan } from '@/lib/stripe/price-to-plan'
+import { withRetry } from '@/lib/stripe/with-retry'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 function service() {
@@ -30,7 +31,7 @@ export async function handleCheckoutSessionCompleted(
   const subscriptionId = typeof session.subscription === 'string'
     ? session.subscription
     : session.subscription.id
-  const sub = await stripe.subscriptions.retrieve(subscriptionId)
+  const sub = await withRetry(() => stripe.subscriptions.retrieve(subscriptionId))
 
   const item = sub.items.data[0]
   if (!item) throw new Error(`Subscription ${sub.id}: no items`)

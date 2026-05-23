@@ -19,7 +19,7 @@ export default async function UpgradePage({
     .eq('id', user.id)
     .single()
 
-  const currentPlan = profile?.plan || 'free'
+  const currentPlan = profile?.plan || 'solo'
   const params = await searchParams
   const requestedPlan = params.plan === 'team' ? 'team' : 'pro'
 

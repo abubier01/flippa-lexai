@@ -49,7 +49,7 @@ export default function LandingNav() {
               <Link href="/demo">Try demo</Link>
             </Button>
             <Button size="sm" asChild>
-              <Link href="/auth/sign-up">Get started free</Link>
+              <Link href="/auth/sign-up">Get started with Solo</Link>
             </Button>
           </div>
 
@@ -76,7 +76,7 @@ export default function LandingNav() {
             <div className="flex flex-col gap-2 pt-2 border-t border-border">
               <Button variant="outline" size="sm" asChild><Link href="/auth/login">Sign in</Link></Button>
               <Button variant="outline" size="sm" asChild><Link href="/demo">Try demo</Link></Button>
-              <Button size="sm" asChild><Link href="/auth/sign-up">Get started free</Link></Button>
+              <Button size="sm" asChild><Link href="/auth/sign-up">Get started with Solo</Link></Button>
             </div>
           </div>
         </div>

@@ -19,7 +19,7 @@ export default function DemoBanner() {
           href="/auth/sign-up"
           className="bg-primary-foreground text-primary font-semibold text-xs px-3 py-1.5 rounded-md hover:bg-primary-foreground/90 transition-colors whitespace-nowrap"
         >
-          Sign up free
+          Sign up for Solo
         </Link>
         <button
           onClick={() => setDismissed(true)}

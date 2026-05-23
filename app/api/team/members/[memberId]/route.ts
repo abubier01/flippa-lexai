@@ -1,14 +1,12 @@
 // DELETE /api/team/members/[memberId] — remove a member (owner only)
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { assertHasFeature, PlanGateError } from '@/lib/plan/access'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 function serviceRole() {
   // Service role is required: owner-driven member removal updates another user's profile and membership rows.
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  return createAdminClient()
 }
 
 export async function DELETE(
@@ -19,6 +17,16 @@ export async function DELETE(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  try {
+    await assertHasFeature(user.id, 'sharedLibrary')
+  } catch (err) {
+    if (err instanceof PlanGateError) {
+      return NextResponse.json({ error: err.message, feature: err.feature }, { status: 403 })
+    }
+    console.error('[team-members] feature gate error:', err)
+    return NextResponse.json({ error: 'Failed to validate team access.' }, { status: 500 })
+  }
 
   const { data: profile } = await supabase
     .from('profiles')

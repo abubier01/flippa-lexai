@@ -17,7 +17,7 @@
 
 ## Past-due grace period
 - We keep the user on their paid plan for 3 days after `current_period_end` if the subscription is `past_due` (Stripe Smart Retries is attempting recovery).
-- After 3 days, `getActivePlan` returns `tier: 'free'` even though `subscriptions.status` is still `past_due`. The user retains the option to update their card via the Customer Portal.
+- After 3 days, `getActivePlan` returns `tier: 'solo'` even though `subscriptions.status` is still `past_due`. The user retains the option to update their card via the Customer Portal.
 
 ## Backfill grandfather subscriptions
 - Created by `scripts/backfill_legacy_paid_users.ts` for users who paid once under the old one-time-charge flow.
@@ -30,16 +30,16 @@
 | `checkout.session.completed` | Resolve user via `client_reference_id`, upsert `subscriptions`, mirror plan to `profiles`. |
 | `customer.subscription.created` | Same as above (backstop). |
 | `customer.subscription.updated` | Upsert `subscriptions`, sync `profiles.plan` based on status. |
-| `customer.subscription.deleted` | Mark `subscriptions.status = 'canceled'`, downgrade `profiles.plan = 'free'`. |
+| `customer.subscription.deleted` | Mark `subscriptions.status = 'canceled'`, downgrade `profiles.plan = 'solo'`. |
 | `invoice.payment_failed` | Mark `subscriptions.status = 'past_due'`. |
 | `invoice.payment_succeeded` | Set `subscriptions.status = 'active'`, extend `current_period_end`. |
 
 ## Operator pre-flight
 Before deploying this PR to production:
-- [ ] Stripe Dashboard has `LexAI Pro` and `LexAI Team` Products with recurring monthly Prices.
+- [ ] Stripe Dashboard has `LexAI Solo`, `LexAI Pro`, and `LexAI Team` Products with recurring monthly Prices.
 - [ ] Customer Portal is configured (allow cancel, switch plan, update card, view invoices).
 - [ ] Webhook endpoint registered: `${APP_URL}/api/stripe/webhook` with events listed above.
 - [ ] Smart Retries enabled.
-- [ ] Env vars set in Vercel (production) and `.env.local` (dev): `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_TEAM_MONTHLY`, `STRIPE_PORTAL_RETURN_URL`.
+- [ ] Env vars set in Vercel (production) and `.env.local` (dev): `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_SOLO_MONTHLY`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_TEAM_MONTHLY`, `STRIPE_PORTAL_RETURN_URL`.
 - [ ] Migration `scripts/005_subscriptions_and_billing_events.sql` applied via Supabase SQL Editor.
 - [ ] Existing paid users backfilled via `tsx scripts/backfill_legacy_paid_users.ts --apply` (after dry-run inspection).

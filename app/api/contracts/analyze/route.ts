@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createGroq } from '@ai-sdk/groq'
 import { generateText } from 'ai'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { requireActiveSubscriptionForApi } from '@/lib/plan/api-entitlement'
 
 export async function POST(req: NextRequest) {
   let contractId: string | undefined
@@ -16,6 +17,8 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const gate = await requireActiveSubscriptionForApi(user.id)
+    if (gate) return gate
 
     const ip = getClientIp(req)
     const limitResult = await consumeRateLimit({

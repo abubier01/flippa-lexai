@@ -24,7 +24,7 @@ export default function MigratePage() {
     <div className="min-h-screen bg-background flex items-center justify-center p-8">
       <div className="max-w-xl w-full bg-card border border-border rounded-xl p-8 space-y-6">
         <h1 className="text-xl font-bold text-foreground">Team Tables Migration</h1>
-        <p className="text-sm text-muted-foreground">Click the button to create team tables in your Supabase database. This is a one-time setup.</p>
+        <p className="text-sm text-muted-foreground">Click the button to create team tables in your Supabase database. This is a single setup step.</p>
         <Button onClick={run} disabled={running || done} className="w-full">
           {running ? 'Running...' : done ? 'Migration Complete' : 'Run Migration'}
         </Button>

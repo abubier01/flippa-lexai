@@ -17,7 +17,7 @@ export function decideActivePlan(
   sub: SubscriptionRow | null,
   now: Date = new Date(),
 ): ActivePlan {
-  if (!sub) return { tier: 'free', status: 'none' }
+  if (!sub) return { tier: 'solo', status: 'none' }
 
   if (sub.status === 'active' || sub.status === 'trialing') {
     return { tier: sub.plan, status: sub.status }
@@ -30,8 +30,8 @@ export function decideActivePlan(
     if (ageDays <= GRACE_PERIOD_DAYS) {
       return { tier: sub.plan, status: 'past_due' }
     }
-    return { tier: 'free', status: 'past_due_expired' }
+    return { tier: 'solo', status: 'past_due_expired' }
   }
 
-  return { tier: 'free', status: sub.status }
+  return { tier: 'solo', status: sub.status }
 }

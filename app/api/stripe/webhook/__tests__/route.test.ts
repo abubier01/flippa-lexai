@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   handleSubscriptionDeleted: vi.fn(),
   handleInvoicePaymentFailed: vi.fn(),
   handleInvoicePaymentSucceeded: vi.fn(),
+  handleChargeRefunded: vi.fn(),
 }))
 
 vi.mock('@/lib/stripe', () => ({
@@ -45,6 +46,10 @@ vi.mock('@/lib/stripe/handlers/invoice-payment-failed', () => ({
 
 vi.mock('@/lib/stripe/handlers/invoice-payment-succeeded', () => ({
   handleInvoicePaymentSucceeded: mocks.handleInvoicePaymentSucceeded,
+}))
+
+vi.mock('@/lib/stripe/handlers/charge-refunded', () => ({
+  handleChargeRefunded: mocks.handleChargeRefunded,
 }))
 
 describe('POST /api/stripe/webhook', () => {
@@ -102,5 +107,29 @@ describe('POST /api/stripe/webhook', () => {
     expect(res.status).toBe(500)
     expect(mocks.markEventFailed).toHaveBeenCalledWith('evt_1', 'boom')
     expect(mocks.markEventProcessed).not.toHaveBeenCalled()
+  })
+
+  it('routes charge.refunded through the refund review handler', async () => {
+    mocks.constructEvent.mockReturnValue({
+      id: 'evt_ref_1',
+      type: 'charge.refunded',
+      data: { object: { id: 'ch_123', amount_refunded: 500 } },
+    })
+    const res = await POST(buildRequest() as never)
+    expect(res.status).toBe(200)
+    expect(mocks.handleChargeRefunded).toHaveBeenCalledTimes(1)
+    expect(mocks.markEventProcessed).toHaveBeenCalledWith('evt_ref_1')
+  })
+
+  it('routes charge.dispute.created through the refund review handler', async () => {
+    mocks.constructEvent.mockReturnValue({
+      id: 'evt_dispute_1',
+      type: 'charge.dispute.created',
+      data: { object: { id: 'dp_123', charge: 'ch_123', amount: 500 } },
+    })
+    const res = await POST(buildRequest() as never)
+    expect(res.status).toBe(200)
+    expect(mocks.handleChargeRefunded).toHaveBeenCalledTimes(1)
+    expect(mocks.markEventProcessed).toHaveBeenCalledWith('evt_dispute_1')
   })
 })

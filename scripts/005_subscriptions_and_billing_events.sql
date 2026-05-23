@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
     'trialing','active','past_due','canceled',
     'incomplete','incomplete_expired','unpaid','paused'
   )),
-  plan TEXT NOT NULL CHECK (plan IN ('pro','team')),
+  plan TEXT NOT NULL CHECK (plan IN ('solo','pro','team')),
   price_id TEXT NOT NULL,
   current_period_end TIMESTAMPTZ NOT NULL,
   cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,

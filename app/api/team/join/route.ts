@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { getActivePlan } from '@/lib/plan/access'
+import { assertHasFeature, PlanGateError } from '@/lib/plan/access'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -12,10 +12,7 @@ export async function POST(req: NextRequest) {
   if (!token) return NextResponse.json({ error: 'Token is required.' }, { status: 400 })
 
   // Service role is required: accepting invites mutates invite/member/profile rows that are not all writable under invitee RLS.
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const service = createAdminClient()
 
   const { data: invite } = await service
     .from('team_invites')
@@ -39,12 +36,17 @@ export async function POST(req: NextRequest) {
   if (!ownerId) {
     return NextResponse.json({ error: 'Team owner is missing.' }, { status: 500 })
   }
-  const ownerPlan = await getActivePlan(ownerId)
-  if (ownerPlan.tier !== 'team') {
-    return NextResponse.json(
-      { error: 'Team subscription is not active. Ask the team owner to renew.' },
-      { status: 402 },
-    )
+  try {
+    await assertHasFeature(ownerId, 'sharedLibrary')
+  } catch (err) {
+    if (err instanceof PlanGateError) {
+      return NextResponse.json(
+        { error: `Team subscription is not active: ${err.message}`, feature: err.feature },
+        { status: 403 },
+      )
+    }
+    console.error('[team-join] owner feature gate error:', err)
+    return NextResponse.json({ error: 'Failed to validate team subscription.' }, { status: 500 })
   }
 
   const { count } = await service
