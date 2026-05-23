@@ -16,3 +16,25 @@ next.user-config.*
 node_modules
 .next/
 .DS_Store
+*.tsbuildinfo
+
+# Local tooling artifacts
+.claude/
+.playwright-mcp/
+
+# Transient logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Local planning/review docs (root-level)
+/*.docx
+/*.md
+!/README.md
+/backlog
+/changelog
+
+# Documentation folders (not source)
+/docs/
+**/docs/
