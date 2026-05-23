@@ -35,6 +35,7 @@ export function DeleteAccountDialog() {
       setConfirmText('')
       setError(null)
       setShowPortalButton(false)
+      setPortalLoading(false)
     }
   }
 
@@ -100,7 +101,7 @@ export function DeleteAccountDialog() {
 
       // Success — sign out client side and redirect
       const supabase = createClient()
-      await supabase.auth.signOut().catch(() => {})
+      supabase.auth.signOut().catch(() => {})
       toast.success('Your account has been deleted.')
       router.push('/')
     } catch {

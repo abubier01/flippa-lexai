@@ -15,7 +15,7 @@
  * Audit finding #2 closed: GDPR Article 17 right-to-erasure self-service endpoint.
  * OAuth OTP re-auth is deferred to a follow-up PR.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { NextRequest } from 'next/server'
 
 // ---------------------------------------------------------------------------
@@ -160,6 +160,12 @@ function makeSupabase(overrides: {
 // ---------------------------------------------------------------------------
 
 describe('DELETE /api/account', () => {
+  beforeAll(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     // Reset fetch to default success
@@ -300,13 +306,31 @@ describe('DELETE /api/account', () => {
 
   // Case 7: /token re-auth fails
   it('returns 401 when the password re-auth call fails', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 400 })
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'invalid_grant' }),
+    })
 
     const res = await DELETE(buildDeleteRequest())
     const body = await res.json()
 
     expect(res.status).toBe(401)
     expect(body.error).toMatch(/incorrect password/i)
+  })
+
+  // Case 7b: MFA-200 bypass — Supabase returns 200 with error/null access_token
+  it('returns 401 when Supabase returns 200 with mfa_required error (MFA bypass prevention)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ error: 'mfa_required', access_token: null }),
+    })
+
+    const res = await DELETE(buildDeleteRequest())
+    const body = await res.json()
+
+    expect(res.status).toBe(401)
+    expect(body.error).toBe('Incorrect password.')
   })
 
   // Case 8: admin.deleteUser fails
@@ -338,7 +362,11 @@ describe('DELETE /api/account', () => {
     await DELETE(buildDeleteRequest())
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('/auth/v1/token?grant_type=password'),
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ apikey: expect.any(String) }),
+        body: expect.stringContaining('"email"'),
+      }),
     )
   })
 })

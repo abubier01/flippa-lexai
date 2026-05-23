@@ -82,11 +82,13 @@ export async function DELETE(req: NextRequest) {
     },
     body: JSON.stringify({ email: user.email, password }),
   })
-  if (!reauthRes.ok) {
+  const reauthBody = await reauthRes.json().catch(() => ({}))
+  if (!reauthRes.ok || reauthBody.error || !reauthBody.access_token) {
     return NextResponse.json({ error: 'Incorrect password.' }, { status: 401 })
   }
-  // Discard the response body; we don't want the returned access_token/refresh_token
-  // anywhere — they'd just rotate the session we're about to destroy.
+  // Body is intentionally not assigned beyond this check — we don't want
+  // the access_token or refresh_token persisted; they'd rotate the session
+  // we're about to destroy.
 
   // Now perform the destructive admin call.
   const service = createServiceClient(
