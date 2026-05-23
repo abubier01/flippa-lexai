@@ -59,7 +59,8 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
       contract={contract}
       analysis={analysisRes.data}
       initialMessages={messagesRes.data || []}
-      userPlan={(profileRes.data?.plan ?? 'solo') as string}
+      userPlan={profileRes.data?.plan ?? 'solo'}
+      // access.teamId can be non-null even when ok=false (lapsed team plan); guard is load-bearing.
       userTeamId={access.ok ? access.teamId : null}
       isTeamViewer={!isOwner && isTeamMember}
     />
