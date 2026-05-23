@@ -218,7 +218,12 @@ export default function UploadForm() {
       <div className="flex items-start gap-3 p-4 rounded-xl border border-border bg-accent/50">
         <AlertCircle className="w-4 h-4 text-primary mt-0.5 shrink-0" />
         <p className="text-xs text-muted-foreground">
-          Your contract is encrypted and analyzed privately. We never share or train on your data.
+          Your contract is processed by our AI provider (Groq) for analysis and
+          stored on your account. We don&apos;t train models on your data.{' '}
+          <Link href="/privacy" className="underline hover:text-foreground">
+            Learn more
+          </Link>
+          .
         </p>
       </div>
 
