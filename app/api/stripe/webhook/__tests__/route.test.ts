@@ -1,5 +1,5 @@
 // app/api/stripe/webhook/__tests__/route.test.ts
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
 import {
   buildCheckoutSessionCompleted,
@@ -59,6 +59,10 @@ beforeEach(() => {
   handleInvoicePaymentFailed.mockClear()
   handleInvoicePaymentSucceeded.mockClear()
   vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_test')
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 function buildRequest(body: string, sig: string | null) {
