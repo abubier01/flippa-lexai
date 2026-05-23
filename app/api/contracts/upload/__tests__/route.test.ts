@@ -285,4 +285,34 @@ describe('POST /api/contracts/upload — server-side size caps', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('X-Lexai-Truncated')).toBeNull()
   })
+
+  it('returns 400 with "Invalid text field" when text is a File object (non-string)', async () => {
+    const fakeFile = {
+      name: 'evil.txt',
+      size: 100,
+      type: 'text/plain',
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      text: () => Promise.resolve(''),
+    }
+
+    const fakeFormData = {
+      get(key: string) {
+        if (key === 'title') return 'Malicious Contract'
+        if (key === 'text') return fakeFile
+        return null
+      },
+    }
+
+    const req = new NextRequest('http://localhost/api/contracts/upload', {
+      method: 'POST',
+      body: '{}',
+    })
+    req.formData = () => Promise.resolve(fakeFormData as unknown as FormData)
+
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(body.error).toBe('Invalid text field')
+  })
 })

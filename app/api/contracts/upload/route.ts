@@ -67,6 +67,10 @@ export async function POST(req: NextRequest) {
 
     if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
 
+    if (text !== null && typeof text !== 'string') {
+      return NextResponse.json({ error: 'Invalid text field' }, { status: 400 })
+    }
+
     if (file && file.size > MAX_FILE_BYTES) {
       return NextResponse.json(
         { error: 'File too large. Maximum size is 10 MB.' },
@@ -75,7 +79,7 @@ export async function POST(req: NextRequest) {
     }
     if (text && text.length > MAX_TEXT_CHARS) {
       return NextResponse.json(
-        { error: `Text too long. Maximum is ${MAX_TEXT_CHARS.toLocaleString()} characters (~12 pages). For longer contracts, please upload the PDF.` },
+        { error: `Text too long. Maximum is ${MAX_TEXT_CHARS.toLocaleString('en-US')} characters (~12 pages). For longer contracts, please upload the PDF.` },
         { status: 413 }
       )
     }
