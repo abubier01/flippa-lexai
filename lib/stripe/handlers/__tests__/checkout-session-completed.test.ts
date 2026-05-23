@@ -79,10 +79,8 @@ describe('handleCheckoutSessionCompleted', () => {
 
   it('throws when client_reference_id and metadata.userId are both missing', async () => {
     const evt = buildCheckoutSessionCompleted({
-      data: { object: { client_reference_id: null, metadata: { userId: undefined } } },
+      data: { object: { client_reference_id: null, metadata: { userId: null } } },
     })
-    // Force metadata.userId to undefined so ?? chain bottoms out to null
-    ;(evt.data.object as unknown as Record<string, unknown>).metadata = {}
     await expect(handleCheckoutSessionCompleted(evt)).rejects.toThrow(/no userId/i)
   })
 
