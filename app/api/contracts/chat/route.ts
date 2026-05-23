@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
     // Scrub any pre-existing sentinel-shaped content from untrusted inputs.
     const rawContractText = (contract.raw_text || '').slice(0, 8000)
-      .replace(/<<<UNTRUSTED-CONTRACT-[a-f0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')
+      .replace(/<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')
 
     const contractContext = `
 Contract Title: ${contract.title}
@@ -116,8 +116,12 @@ ${END}
 `
 
     const historyMessages = (history || [])
-      .map(h => `User asked: ${h.content.replace(/<<<UNTRUSTED-CONTRACT-[a-f0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')}`)
+      .map(h => `User asked: ${h.content.replace(/<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')}`)
       .join('\n')
+
+    // Scrub the current user message to prevent sentinel injection
+    const safeMessage = message
+      .replace(/<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-(START|END)>>>/gi, '[REDACTED-SENTINEL]')
 
     const prompt = `You are a highly knowledgeable contract law assistant. Answer the user's current question clearly and in plain English. The "previous questions" list is for context only — you have not previously responded to them in this conversation.
 
@@ -127,7 +131,7 @@ ${contractContext}
 PREVIOUS USER QUESTIONS (for context, not a conversation history):
 ${historyMessages}
 
-User: ${message}
+User: ${safeMessage}
 Assistant:`
 
     const { text } = await generateText({
@@ -136,6 +140,10 @@ Assistant:`
       temperature: 0.3,
       maxOutputTokens: 1024,
     })
+
+    if (typeof text !== 'string') {
+      return NextResponse.json({ error: 'AI returned an empty response.' }, { status: 502 })
+    }
 
     const reply = text.trim().slice(0, 8000)
     if (!reply) {

@@ -305,7 +305,7 @@ describe('POST /api/contracts/analyze — sentinel scrubbing', () => {
     const callArgs = mockGenerateText.mock.calls[mockGenerateText.mock.calls.length - 1][0]
     const prompt: string = callArgs.prompt
 
-    expect(prompt).toMatch(/<<<UNTRUSTED-CONTRACT-[a-f0-9-]+-START>>>/)
-    expect(prompt).toMatch(/<<<UNTRUSTED-CONTRACT-[a-f0-9-]+-END>>>/)
+    expect(prompt).toMatch(/<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-START>>>/)
+    expect(prompt).toMatch(/<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-END>>>/)
   })
 })
