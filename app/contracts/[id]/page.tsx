@@ -1,8 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import ContractAnalysisView from '@/components/contracts/contract-analysis-view'
 import ContractProcessing from '@/components/contracts/contract-processing'
+import { hasTeamAccess } from '@/lib/plan/access'
 
 export default async function ContractPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -10,47 +10,45 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const service = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  // Parallel fetches. RLS enforces access:
+  //   - profiles_select_own (auth.uid() = id): the profile fetch only ever
+  //     returns the VIEWER's own profile, never another user's — including
+  //     the contract owner's. That's fine because we only need the viewer's
+  //     own plan/team_id to render their UI shell.
+  //   - contracts_select_own + contracts_select_team: caller sees their own
+  //     contracts AND any contract shared with a team they belong to.
+  //   - analyses_select_own / messages_select_own (auth.uid() = user_id):
+  //     only rows where the row's user_id matches the caller. Since the
+  //     analysis/messages rows carry the OWNER's user_id (not the viewer's),
+  //     a team viewer reading a shared contract will get null/empty here
+  //     until team-scoped policies are added (see "team-viewer gap" below).
+  const [profileRes, contractRes] = await Promise.all([
+    supabase.from('profiles').select('plan, team_id').eq('id', user.id).single(),
+    supabase.from('contracts').select('*').eq('id', id).single(),
+  ])
 
-  // Fetch the viewer's profile to get their team_id
-  const { data: profile } = await service
-    .from('profiles')
-    .select('plan, team_id')
-    .eq('id', user.id)
-    .single()
+  if (!contractRes.data) notFound()
+  const contract = contractRes.data
 
-  // Fetch the contract — owned by user OR shared with team the user belongs to
-  const { data: contract } = await service
-    .from('contracts')
-    .select('*')
-    .eq('id', id)
-    .single()
-
-  if (!contract) notFound()
-
-  // Access check: user owns it, OR it's shared with a team the user is a member of
+  const access = await hasTeamAccess(user.id)
   const isOwner = contract.user_id === user.id
   const isTeamMember =
     contract.shared_with_team === true &&
-    profile?.team_id != null &&
-    contract.team_id === profile.team_id
+    access.ok &&
+    access.teamId != null &&
+    contract.team_id === access.teamId
 
   if (!isOwner && !isTeamMember) notFound()
 
-  const { data: analysis } = await service
-    .from('contract_analyses')
-    .select('*')
-    .eq('contract_id', id)
-    .single()
-
-  const { data: messages } = await service
-    .from('chat_messages')
-    .select('*')
-    .eq('contract_id', id)
-    .order('created_at', { ascending: true })
+  // Team-viewer gap: analyses_select_own and messages_select_own only permit
+  // auth.uid() = user_id, so a team viewer will receive null/[] here. This is
+  // acceptable (Option A) — the analysis tabs render empty-state gracefully and
+  // the chat tab is gated client-side by isTeamViewer. Follow-up PR should add
+  // analyses_select_team and messages_select_team RLS policies.
+  const [analysisRes, messagesRes] = await Promise.all([
+    supabase.from('contract_analyses').select('*').eq('contract_id', id).maybeSingle(),
+    supabase.from('chat_messages').select('*').eq('contract_id', id).order('created_at', { ascending: true }),
+  ])
 
   if (contract.status === 'pending' || contract.status === 'processing') {
     return <ContractProcessing contractId={id} contractTitle={contract.title} status={contract.status} />
@@ -59,10 +57,10 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   return (
     <ContractAnalysisView
       contract={contract}
-      analysis={analysis}
-      initialMessages={messages || []}
-      userPlan={(profile?.plan ?? 'free') as string}
-      userTeamId={profile?.team_id ?? null}
+      analysis={analysisRes.data}
+      initialMessages={messagesRes.data || []}
+      userPlan={(profileRes.data?.plan ?? 'solo') as string}
+      userTeamId={access.ok ? access.teamId : null}
       isTeamViewer={!isOwner && isTeamMember}
     />
   )
