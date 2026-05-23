@@ -152,7 +152,7 @@ Assistant:`
 
     // Save both messages
     await supabase.from('chat_messages').insert([
-      { contract_id: contractId, user_id: user.id, role: 'user', content: message },
+      { contract_id: contractId, user_id: user.id, role: 'user', content: safeMessage },
       { contract_id: contractId, user_id: user.id, role: 'assistant', content: reply },
     ])
 
