@@ -367,6 +367,6 @@ describe('POST /api/contracts/upload — rate limiting', () => {
 
     expect(res.status).toBe(429)
     expect(body.error).toBe('Too many uploads. Please try again later.')
-    expect(res.headers.get('Retry-After')).not.toBeNull()
+    expect(res.headers.get('Retry-After')).toBe('3600')
   })
 })

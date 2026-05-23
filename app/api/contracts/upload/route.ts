@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     const ip = getClientIp(req)
     const limitResult = consumeRateLimit({
-      key: `upload:${user.id}:${ip}`,
+      key: `contract:upload:${user.id}:${ip}`,
       limit: 10,
       windowMs: 60 * 60 * 1000,  // 1 hour
     })
