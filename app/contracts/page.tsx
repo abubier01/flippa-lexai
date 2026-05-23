@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { FileText, Upload, ArrowRight } from 'lucide-react'
+import { FileText, Upload } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import RiskBadge from '@/components/contracts/risk-badge'
+import ContractRowActions from '@/components/contracts/contract-row-actions'
 
 export default async function ContractsPage() {
   const supabase = await createClient()
@@ -113,12 +114,7 @@ export default async function ContractsPage() {
                   </div>
 
                   <div className="sm:col-span-1 flex justify-end">
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/contracts/${contract.id}`}>
-                        <ArrowRight className="w-4 h-4" />
-                        <span className="sr-only">View</span>
-                      </Link>
-                    </Button>
+                    <ContractRowActions contractId={contract.id} />
                   </div>
                 </div>
               ))}

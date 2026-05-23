@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import RiskBadge from './risk-badge'
 import ContractSummaryTab from './contract-summary-tab'
 import ContractRisksTab from './contract-risks-tab'
 import ContractClausesTab from './contract-clauses-tab'
 import ContractChatTab from './contract-chat-tab'
+import ContractDeleteButton from './contract-delete-button'
 import { FileText, Calendar, Users } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
@@ -29,6 +31,7 @@ function computeRiskScoreFromRisks(risks: Risk[]): number {
 }
 
 export default function ContractAnalysisView({ contract, analysis, initialMessages, userPlan, userTeamId, isTeamViewer = false }: Props) {
+  const router = useRouter()
   const [tab, setTab] = useState('summary')
   const [shared, setShared] = useState(!!(contract as unknown as Record<string, unknown>).shared_with_team)
   const [sharingLoading, setSharingLoading] = useState(false)
@@ -97,6 +100,13 @@ export default function ContractAnalysisView({ contract, analysis, initialMessag
                 <Users className="w-3 h-3" />
                 {sharingLoading ? '...' : shared ? 'Shared with team' : 'Share with team'}
               </button>
+            )}
+            {!isTeamViewer && (
+              <ContractDeleteButton
+                contractId={contract.id}
+                variant="outline"
+                onDeleted={() => router.push('/contracts')}
+              />
             )}
             <div className="text-center">
               <div className="text-2xl font-bold text-foreground">{displayedRiskScore}</div>
