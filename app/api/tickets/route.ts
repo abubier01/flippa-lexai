@@ -70,6 +70,7 @@ export async function GET() {
       id, ticket_number, subject, category, status, priority, created_at, updated_at,
       ticket_replies(count)
     `)
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
