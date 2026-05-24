@@ -71,6 +71,11 @@ const { mockStreamText, makeSupabase } = vi.hoisted(() => {
     const eqAfterUpdate = vi.fn().mockResolvedValue(updateResult)
     const updateMock = vi.fn().mockReturnValue({ eq: eqAfterUpdate })
 
+    // Exposes the quota-count chain so tests can assert which filters were applied.
+    const countChainCalls: {
+      chain?: { eq: ReturnType<typeof vi.fn>; neq: ReturnType<typeof vi.fn> }
+    } = {}
+
     // Track call order
     let callIndex = 0
 
@@ -97,20 +102,24 @@ const { mockStreamText, makeSupabase } = vi.hoisted(() => {
         }
 
         if (table === 'chat_messages' && idx === 2) {
-          // Quota count — needs to resolve the full chain .select().eq().eq().eq()
-          // The last eq() in the chain resolves to { count: messageCount }
-          const eqFn = vi.fn().mockImplementation(() => {
-            // Each .eq() call returns the same chain
-            return eqChainObj
-          })
-          const eqChainObj = {
-            eq: eqFn,
-            // The promise resolution happens when the chain is awaited
-            then: (resolve: (v: { count: number }) => void) =>
+          // Quota count — resolves the full chain. Post-Issue-1 the route counts
+          // completed assistant turns: .select({count}).eq(contract_id).eq(role,'assistant').neq(content,'')
+          // Pre-Issue-1 it counted user turns via .eq().eq().eq().
+          // The chain object supports both .eq() and .neq(); awaiting any node
+          // in the chain resolves to { count: messageCount }.
+          const chainObj: {
+            eq: ReturnType<typeof vi.fn>
+            neq: ReturnType<typeof vi.fn>
+            then: (resolve: (v: { count: number }) => void) => Promise<void>
+          } = {
+            eq: vi.fn(() => chainObj),
+            neq: vi.fn(() => chainObj),
+            then: (resolve) =>
               Promise.resolve({ count: messageCount }).then(resolve),
           }
+          countChainCalls.chain = chainObj
           return {
-            select: vi.fn().mockReturnValue(eqChainObj),
+            select: vi.fn().mockReturnValue(chainObj),
           }
         }
 
@@ -162,7 +171,7 @@ const { mockStreamText, makeSupabase } = vi.hoisted(() => {
       }),
     }
 
-    return { supabase, insertMock, selectAfterInsert, updateMock, eqAfterUpdate }
+    return { supabase, insertMock, selectAfterInsert, updateMock, eqAfterUpdate, countChainCalls }
   }
 
   return { mockStreamText, makeSupabase }
@@ -573,6 +582,38 @@ describe('POST /api/contracts/chat — Plan 4: pre-stream persistence resilience
     expect(updateArgs).toMatchObject({ content: 'hello world' })
     // .eq('id', placeholderId)
     expect(eqAfterUpdate).toHaveBeenCalledWith('id', 'msg-placeholder-1')
+  })
+
+  it('does not count empty assistant placeholders toward message quota', async () => {
+    // Issue 1: prior to the fix, the quota query counted user rows. After the
+    // pre-stream insert refactor, that meant aborted/failed streams (which leave
+    // empty assistant placeholders behind) ALSO inflated the count via their
+    // companion user row. The fix counts only assistant rows with non-empty
+    // content (completed turns). Verify the route hits the count query with the
+    // new filter shape.
+    const { supabase, countChainCalls } = makeSupabase()
+    currentSupabase = supabase
+
+    mockStreamText.mockImplementationOnce(
+      (args: { onFinish?: (event: { text: string }) => Promise<void> }) => {
+        void args.onFinish
+        return { toTextStreamResponse: vi.fn().mockReturnValue(new Response('ok')) }
+      },
+    )
+
+    await POST(buildRequest('What are the payment terms?'))
+
+    const chain = countChainCalls.chain
+    expect(chain).toBeDefined()
+
+    // The count query must filter to assistant rows…
+    const eqCalls = chain!.eq.mock.calls.map((c) => [c[0], c[1]])
+    expect(eqCalls).toContainEqual(['contract_id', 'contract-1'])
+    expect(eqCalls).toContainEqual(['role', 'assistant'])
+
+    // …and exclude empty placeholders via .neq('content', '').
+    const neqCalls = chain!.neq.mock.calls.map((c) => [c[0], c[1]])
+    expect(neqCalls).toContainEqual(['content', ''])
   })
 
   it('logs chat.persist.update_failed and does not crash when onFinish UPDATE fails', async () => {
