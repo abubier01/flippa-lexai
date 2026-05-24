@@ -437,6 +437,32 @@ describe('POST /api/contracts/chat — current message sentinel scrubbing', () =
   })
 })
 
+describe('POST /api/contracts/chat — team viewer read-only', () => {
+  it('returns 403 chat_readonly when caller is a team viewer (not contract owner)', async () => {
+    const { supabase, insertMock } = makeSupabase({
+      contractData: {
+        id: 'contract-1',
+        user_id: 'owner-1', // different from authed user 'user-1'
+        team_id: 't1',
+        shared_with_team: true,
+        raw_text: 'x',
+        title: 't',
+        file_name: 'f',
+        risk_score: 0,
+      },
+      analysisData: null,
+    })
+    currentSupabase = supabase
+
+    const res = await POST(buildRequest('hi'))
+
+    expect(res.status).toBe(403)
+    const body = await res.json()
+    expect(body.kind).toBe('chat_readonly')
+    expect(insertMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('POST /api/contracts/chat — contract metadata sentinel scrubbing', () => {
   it('scrubs a forged sentinel in contract.title before it reaches the prompt', async () => {
     const maliciousTitle =
