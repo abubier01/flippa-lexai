@@ -17,6 +17,11 @@ import {
   CHAT_REPLY_MAX_CHARS,
 } from '@/lib/constants/chat-limits'
 
+// Single source of truth for the user-facing persistence-failure message.
+// Surfaced from two distinct branches (insert error / placeholder missing); we
+// want both to read identically so the client never branches on copy.
+const SAVE_FAILED_MESSAGE = 'Failed to save message — please retry.'
+
 export async function POST(req: NextRequest) {
   let userId: string | undefined
   const rlog = logger(req, 'contracts.chat')
@@ -186,17 +191,22 @@ Assistant:`
       .select('id, role')
 
     if (insertErr || !inserted) {
+      // Preserve the full Supabase error (code/details/hint) — the logger
+      // serializes Error instances, so a synthetic new Error(insertErr.message)
+      // would drop those fields. Pass the original PostgrestError as-is and
+      // surface .code at the top level so log-aggregation queries can filter.
       rlog.error('chat.persist.pre_stream_failed', {
-        err: new Error(insertErr?.message ?? 'no rows returned'),
+        err: insertErr ?? new Error('no rows returned'),
+        code: insertErr?.code,
         userId: user.id,
       })
-      return NextResponse.json({ error: 'Failed to save message — please retry.' }, { status: 500 })
+      return NextResponse.json({ error: SAVE_FAILED_MESSAGE }, { status: 500 })
     }
 
     const placeholder = inserted.find(r => r.role === 'assistant')
     if (!placeholder) {
       rlog.error('chat.persist.placeholder_missing', { userId: user.id })
-      return NextResponse.json({ error: 'Failed to save message — please retry.' }, { status: 500 })
+      return NextResponse.json({ error: SAVE_FAILED_MESSAGE }, { status: 500 })
     }
 
     const result = streamText({
@@ -217,8 +227,10 @@ Assistant:`
             .update({ content: reply })
             .eq('id', placeholder.id)
           if (updateErr) {
+            // Same rationale as pre_stream_failed: preserve full PostgrestError.
             rlog.error('chat.persist.update_failed', {
-              err: new Error(updateErr.message),
+              err: updateErr,
+              code: updateErr.code,
               userId: user.id,
               placeholderId: placeholder.id,
             })
