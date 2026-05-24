@@ -2,12 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import TeamDashboard, {
-  type Member,
-  type Invite,
-  type SharedContract,
-  type Analytics,
-} from '@/components/team/team-dashboard'
+import TeamDashboard from '@/components/team/team-dashboard'
+import type { Member, Invite, SharedContract, Analytics, Team } from '@/components/team/types'
 import { hasTeamAccess } from '@/lib/plan/access'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
@@ -51,7 +47,7 @@ export default async function TeamPage() {
   // Use access.teamId (resolved from subscription or membership) as the team lookup key.
   const effectiveTeamId = access.teamId ?? profile?.team_id
 
-  let team: { id: string; name: string; owner_id: string; created_at: string } | null = null
+  let team: Team | null = null
   let members: Member[] = []
   let invites: Invite[] = []
   let sharedContracts: SharedContract[] = []
