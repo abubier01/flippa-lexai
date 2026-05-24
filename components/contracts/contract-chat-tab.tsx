@@ -11,6 +11,7 @@ import type { ChatMessage } from '@/lib/types'
 interface Props {
   contractId: string
   initialMessages: ChatMessage[]
+  readOnly?: boolean
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -20,7 +21,7 @@ const SUGGESTED_QUESTIONS = [
   'What happens if there is a dispute?',
 ]
 
-export default function ContractChatTab({ contractId, initialMessages }: Props) {
+export default function ContractChatTab({ contractId, initialMessages, readOnly = false }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -33,6 +34,7 @@ export default function ContractChatTab({ contractId, initialMessages }: Props) 
   }, [messages])
 
   async function sendMessage(msg?: string) {
+    if (readOnly) return
     const text = (msg ?? input).trim()
     if (!text || loading) return
     setInput('')
@@ -124,6 +126,11 @@ export default function ContractChatTab({ contractId, initialMessages }: Props) 
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        {readOnly && (
+          <div className="rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+            You can view this conversation but only the contract owner can send messages.
+          </div>
+        )}
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center">
@@ -138,7 +145,8 @@ export default function ContractChatTab({ contractId, initialMessages }: Props) 
                 <button
                   key={q}
                   onClick={() => sendMessage(q)}
-                  className="text-left text-xs text-muted-foreground p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-accent hover:text-foreground transition-colors"
+                  disabled={readOnly}
+                  className="text-left text-xs text-muted-foreground p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground disabled:hover:border-border"
                 >
                   {q}
                 </button>
@@ -205,16 +213,16 @@ export default function ContractChatTab({ contractId, initialMessages }: Props) 
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                placeholder="Ask about this contract…"
+                placeholder={readOnly ? 'Chat is read-only for shared contracts' : 'Ask about this contract…'}
                 rows={1}
                 className="resize-none flex-1 min-h-0 max-h-32 py-2.5"
-                disabled={loading}
+                disabled={readOnly || loading}
               />
               <Button
                 size="icon"
                 className="h-10 w-10 shrink-0"
                 onClick={() => sendMessage()}
-                disabled={!input.trim() || loading}
+                disabled={readOnly || loading || !input.trim()}
                 aria-label="Send message"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
