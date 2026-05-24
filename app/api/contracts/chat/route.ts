@@ -167,6 +167,31 @@ ${historyMessages}
 User: ${safeMessage}
 Assistant:`
 
+    // Pre-stream: insert user row + empty assistant placeholder so a transient
+    // DB failure surfaces as 500 BEFORE any stream bytes go out (no silent loss).
+    // The placeholder is filled in via UPDATE in onFinish.
+    const { data: inserted, error: insertErr } = await supabase
+      .from('chat_messages')
+      .insert([
+        { contract_id: contractId, user_id: user.id, role: 'user', content: safeMessage },
+        { contract_id: contractId, user_id: user.id, role: 'assistant', content: '' },
+      ])
+      .select('id, role')
+
+    if (insertErr || !inserted) {
+      rlog.error('chat.persist.pre_stream_failed', {
+        err: new Error(insertErr?.message ?? 'no rows returned'),
+        userId: user.id,
+      })
+      return NextResponse.json({ error: 'Failed to save message — please retry.' }, { status: 500 })
+    }
+
+    const placeholder = inserted.find(r => r.role === 'assistant')
+    if (!placeholder) {
+      rlog.error('chat.persist.placeholder_missing', { userId: user.id })
+      return NextResponse.json({ error: 'Failed to save message — please retry.' }, { status: 500 })
+    }
+
     const result = streamText({
       model: groq('llama-3.3-70b-versatile'),
       prompt,
@@ -175,12 +200,16 @@ Assistant:`
       onFinish: async ({ text }) => {
         const reply = text.trim().slice(0, CHAT_REPLY_MAX_CHARS)
         if (!reply) return
-        const { error } = await supabase.from('chat_messages').insert([
-          { contract_id: contractId, user_id: user.id, role: 'user', content: safeMessage },
-          { contract_id: contractId, user_id: user.id, role: 'assistant', content: reply },
-        ])
-        if (error) {
-          rlog.error('chat.persist.failed', { err: new Error(error.message), userId: user.id })
+        const { error: updateErr } = await supabase
+          .from('chat_messages')
+          .update({ content: reply })
+          .eq('id', placeholder.id)
+        if (updateErr) {
+          rlog.error('chat.persist.update_failed', {
+            err: new Error(updateErr.message),
+            userId: user.id,
+            placeholderId: placeholder.id,
+          })
         }
       },
     })
