@@ -16,6 +16,12 @@
 --
 -- Idempotent: safe to re-run via the Supabase SQL editor. Postgres does not
 -- support `CREATE POLICY IF NOT EXISTS`, so we DROP-then-CREATE for both.
+--
+-- Note: these policies' EXISTS subquery against `public.contracts` runs under
+-- the calling user's RLS (policies are not SECURITY DEFINER), so they
+-- transitively depend on `contracts_select_team` (002_create_team_tables.sql)
+-- continuing to exist. Removing or restricting that policy will silently break
+-- analyses/chat visibility for team viewers.
 
 -- ---------------------------------------------------------------------------
 -- contract_analyses: team viewers can SELECT analyses for shared contracts.
