@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasTeamAccess } from '@/lib/plan/access'
-import { getServiceClient } from '@/lib/supabase/service-role'
+import { log } from '@/lib/log'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -33,15 +33,19 @@ export async function POST(req: NextRequest) {
 
   if (!contract) return NextResponse.json({ error: 'Contract not found.' }, { status: 404 })
 
-  // Use service role to update — RLS on contracts update may block this
-  const service = getServiceClient()
-  const { error } = await service.from('contracts').update({
+  // Update via caller-scoped client; contracts_update_share RLS policy gates this.
+  const { error } = await supabase.from('contracts').update({
     shared_with_team: share,
     team_id: share ? profile.team_id : null,
   }).eq('id', contractId)
 
   if (error) {
-    console.error('[share-contract] error:', error.message)
+    log.error('team.share-contract.update.failed', {
+      userId: user.id,
+      contractId,
+      share,
+      err: new Error(error.message),
+    })
     return NextResponse.json({ error: 'Failed to update sharing.' }, { status: 500 })
   }
 

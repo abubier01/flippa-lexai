@@ -5,6 +5,7 @@ import { Upload, FileText, AlertTriangle, CheckCircle, ArrowRight, TrendingUp, Z
 import { formatDistanceToNow } from 'date-fns'
 import RiskBadge from '@/components/contracts/risk-badge'
 import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
+import { log } from '@/lib/log'
 
 interface ContractRiskScoreRow {
   contract_id: string
@@ -47,6 +48,21 @@ export default async function DashboardPage() {
       .eq('id', user!.id)
       .single(),
   ])
+
+  const rpcErrors = [
+    { name: 'get_user_contract_risk_scores', error: scoresRes.error },
+    { name: 'get_user_contract_score_summary', error: summaryRes.error },
+  ].filter((entry) => entry.error)
+
+  if (rpcErrors.length > 0) {
+    log.error('dashboard.rpc.failed', {
+      userId: user?.id,
+      rpcErrors: rpcErrors.map((entry) => ({
+        name: entry.name,
+        message: entry.error?.message,
+      })),
+    })
+  }
 
   const contracts = contractsRes.data
   const scoreRows: ContractRiskScoreRow[] = (scoresRes.data as ContractRiskScoreRow[] | null) ?? []
@@ -98,6 +114,11 @@ export default async function DashboardPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20 md:pb-0">
+      {rpcErrors.length > 0 && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          Some dashboard metrics are currently unavailable and may appear as zeros.
+        </div>
+      )}
       {/* Welcome + Usage */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>

@@ -92,9 +92,9 @@ async function renderPageWith(opts: { rpc: RpcConfig }) {
 
   // renderToStaticMarkup forces React to invoke the dynamic child, triggering
   // the prop-capture mock above.
-  renderToStaticMarkup(tree)
+  const html = renderToStaticMarkup(tree)
 
-  return { calls }
+  return { calls, html }
 }
 
 // ---------------------------------------------------------------------------
@@ -280,5 +280,34 @@ describe('ReportsPage (RSC)', () => {
       { range: '61-80', count: 0 },
       { range: '81-100', count: 0 },
     ])
+  })
+
+  it('renders an error banner when a reports RPC fails', async () => {
+    const { html } = await renderPageWith({
+      rpc: {
+        get_user_risk_distribution: {
+          single: { data: null, error: { message: 'function does not exist' } },
+        },
+        get_user_monthly_contracts: { single: { data: [], error: null } },
+        get_user_contract_score_summary: {
+          single: {
+            data: [{
+              total: 0,
+              completed_count: 0,
+              high_risk_count: 0,
+              avg_risk_score: 0,
+              bucket_0_20: 0,
+              bucket_21_40: 0,
+              bucket_41_60: 0,
+              bucket_61_80: 0,
+              bucket_81_100: 0,
+            }],
+            error: null,
+          },
+        },
+      },
+    })
+
+    expect(html).toContain('Some report metrics are currently unavailable')
   })
 })

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import dynamic from 'next/dynamic'
+import { log } from '@/lib/log'
 
 const ReportsCharts = dynamic(() => import('@/components/reports/reports-charts'), {
   loading: () => (
@@ -41,6 +42,21 @@ export default async function ReportsPage() {
     supabase.rpc('get_user_monthly_contracts'),
     supabase.rpc('get_user_contract_score_summary'),
   ])
+
+  const rpcErrors = [
+    { name: 'get_user_risk_distribution', error: distRes.error },
+    { name: 'get_user_monthly_contracts', error: monthlyRes.error },
+    { name: 'get_user_contract_score_summary', error: summaryRes.error },
+  ].filter((entry) => entry.error)
+
+  if (rpcErrors.length > 0) {
+    log.error('reports.rpc.failed', {
+      rpcErrors: rpcErrors.map((entry) => ({
+        name: entry.name,
+        message: entry.error?.message,
+      })),
+    })
+  }
 
   const distRows: RiskDistributionRow[] = (distRes.data as RiskDistributionRow[] | null) ?? []
   const monthlyRows: MonthlyContractRow[] = (monthlyRes.data as MonthlyContractRow[] | null) ?? []
@@ -93,6 +109,11 @@ export default async function ReportsPage() {
 
   return (
     <div className="max-w-6xl mx-auto pb-20 md:pb-0">
+      {rpcErrors.length > 0 && (
+        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          Some report metrics are currently unavailable and may appear as zeros.
+        </div>
+      )}
       <ReportsCharts
         total={total}
         completed={completedCount}

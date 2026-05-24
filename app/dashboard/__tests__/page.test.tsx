@@ -243,4 +243,38 @@ describe('DashboardPage (RSC)', () => {
     const matches = html.match(/>1<\/p>/g) ?? []
     expect(matches.length).toBeGreaterThanOrEqual(3)
   })
+
+  it('renders an error banner when a dashboard RPC fails', async () => {
+    const { html } = await renderPage({
+      recentContracts: [],
+      profile: {
+        plan: 'free',
+        contracts_this_month: 0,
+        usage_reset_at: new Date().toISOString(),
+      },
+      rpc: {
+        get_user_contract_risk_scores: {
+          single: { data: null, error: { message: 'permission denied' } },
+        },
+        get_user_contract_score_summary: {
+          single: {
+            data: [{
+              total: 0,
+              completed_count: 0,
+              high_risk_count: 0,
+              avg_risk_score: 0,
+              bucket_0_20: 0,
+              bucket_21_40: 0,
+              bucket_41_60: 0,
+              bucket_61_80: 0,
+              bucket_81_100: 0,
+            }],
+            error: null,
+          },
+        },
+      },
+    })
+
+    expect(html).toContain('Some dashboard metrics are currently unavailable')
+  })
 })

@@ -121,6 +121,33 @@ await run(`DO $$ BEGIN
   END IF;
 END $$`, 'Contracts team RLS policies')
 
+await run(`DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='contract_analyses' AND policyname='analyses_select_team') THEN
+    CREATE POLICY "analyses_select_team" ON public.contract_analyses FOR SELECT USING (
+      EXISTS (
+        SELECT 1
+          FROM public.contracts c
+          JOIN public.team_members tm ON tm.team_id = c.team_id
+         WHERE c.id = contract_analyses.contract_id
+           AND c.shared_with_team = TRUE
+           AND tm.user_id = auth.uid()
+      )
+    );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='chat_messages' AND policyname='messages_select_team') THEN
+    CREATE POLICY "messages_select_team" ON public.chat_messages FOR SELECT USING (
+      EXISTS (
+        SELECT 1
+          FROM public.contracts c
+          JOIN public.team_members tm ON tm.team_id = c.team_id
+         WHERE c.id = chat_messages.contract_id
+           AND c.shared_with_team = TRUE
+           AND tm.user_id = auth.uid()
+      )
+    );
+  END IF;
+END $$`, 'Shared-contract child-table RLS policies')
+
 // Extend profiles
 await run(`ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS team_id UUID REFERENCES public.teams(id) ON DELETE SET NULL`, 'Add team_id to profiles')
 
