@@ -14,6 +14,7 @@ import {
   CHAT_LLM_TEMPERATURE,
   CHAT_RATE_LIMIT_MAX,
   CHAT_RATE_LIMIT_WINDOW_MS,
+  CHAT_REPLY_MAX_CHARS,
 } from '@/lib/constants/chat-limits'
 
 export async function POST(req: NextRequest) {
@@ -163,7 +164,7 @@ Assistant:`
       temperature: CHAT_LLM_TEMPERATURE,
       maxOutputTokens: CHAT_LLM_MAX_OUTPUT_TOKENS,
       onFinish: async ({ text }) => {
-        const reply = text.trim().slice(0, CHAT_CONTRACT_TEXT_MAX_CHARS)
+        const reply = text.trim().slice(0, CHAT_REPLY_MAX_CHARS)
         if (!reply) return
         const { error } = await supabase.from('chat_messages').insert([
           { contract_id: contractId, user_id: user.id, role: 'user', content: safeMessage },

@@ -28,11 +28,17 @@ export const CHAT_HISTORY_MESSAGES = 10
  * Distinct from ANALYZE_TRUNCATION_CHARS (12,000) because the chat window
  * also carries analysis summary, key points, risks, clauses, history, and
  * the current user message — so the contract slice is intentionally tighter.
- *
- * Also used to cap the persisted assistant reply so a single huge response
- * cannot poison subsequent turns or blow up row size.
  */
 export const CHAT_CONTRACT_TEXT_MAX_CHARS = 8000
+
+/**
+ * Maximum characters of the persisted assistant reply.
+ *
+ * Caps a single response so it cannot poison subsequent turns or blow up
+ * row size. Shares the value with CHAT_CONTRACT_TEXT_MAX_CHARS today but
+ * represents a distinct concept — tune independently.
+ */
+export const CHAT_REPLY_MAX_CHARS = 8000
 
 /** Sampling temperature for the chat LLM call. Low to keep answers grounded. */
 export const CHAT_LLM_TEMPERATURE = 0.3
