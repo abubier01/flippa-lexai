@@ -55,4 +55,56 @@ describe('log', () => {
     expect(payload.password).toBe('[REDACTED]')
     expect(payload.apiKey).toBe('[REDACTED]')
   })
+
+  it('redacts case-insensitively', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    log.info('mixed.case', {
+      Password: 'a',
+      API_KEY: 'b',
+      Authorization: 'Bearer c',
+      SessionId: 'd',
+    })
+    const payload = JSON.parse(spy.mock.calls[0][0] as string)
+    expect(payload.Password).toBe('[REDACTED]')
+    expect(payload.API_KEY).toBe('[REDACTED]')
+    expect(payload.Authorization).toBe('[REDACTED]')
+    expect(payload.SessionId).toBe('[REDACTED]')
+  })
+
+  it('redacts nested fields recursively', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    log.info('nested', {
+      user: { id: 'u1', token: 'tk_abc' },
+      request: { headers: { cookie: 'sid=xyz' } },
+    })
+    const payload = JSON.parse(spy.mock.calls[0][0] as string)
+    expect(payload.user.id).toBe('u1')
+    expect(payload.user.token).toBe('[REDACTED]')
+    expect(payload.request.headers.cookie).toBe('[REDACTED]')
+  })
+
+  it('redacts inside arrays of objects', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    log.info('arr', {
+      items: [
+        { name: 'one', secret: 's1' },
+        { name: 'two', secret: 's2' },
+      ],
+    })
+    const payload = JSON.parse(spy.mock.calls[0][0] as string)
+    expect(payload.items[0].name).toBe('one')
+    expect(payload.items[0].secret).toBe('[REDACTED]')
+    expect(payload.items[1].name).toBe('two')
+    expect(payload.items[1].secret).toBe('[REDACTED]')
+  })
+
+  it('passes innocuous fields through untouched', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    log.info('innocuous', { userId: 'u1', route: '/x', count: 3, ok: true })
+    const payload = JSON.parse(spy.mock.calls[0][0] as string)
+    expect(payload.userId).toBe('u1')
+    expect(payload.route).toBe('/x')
+    expect(payload.count).toBe(3)
+    expect(payload.ok).toBe(true)
+  })
 })
