@@ -9,8 +9,31 @@ function serializeContext(ctx?: LogContext): LogContext | undefined {
   }
 }
 
+const REDACT_SUBSTRINGS = [
+  'password', 'token', 'secret', 'apikey', 'api_key',
+  'authorization', 'cookie', 'sessionid',
+]
+
+function shouldRedactKey(key: string): boolean {
+  const lower = key.toLowerCase()
+  return REDACT_SUBSTRINGS.some(s => lower.includes(s))
+}
+
+function redact(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redact)
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = shouldRedactKey(k) ? '[REDACTED]' : redact(v)
+    }
+    return out
+  }
+  return value
+}
+
 function emit(level: Level, msg: string, ctx?: LogContext) {
-  const entry = { level, msg, ts: new Date().toISOString(), ...ctx }
+  const safeCtx = ctx ? (redact(ctx) as LogContext) : undefined
+  const entry = { level, msg, ts: new Date().toISOString(), ...safeCtx }
   const line = JSON.stringify(entry)
   if (level === 'error') console.error(line)
   else if (level === 'warn') console.warn(line)
