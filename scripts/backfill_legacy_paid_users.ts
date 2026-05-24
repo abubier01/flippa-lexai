@@ -7,7 +7,7 @@
 
 import 'dotenv/config'
 import Stripe from 'stripe'
-import { getServiceClient } from '@/lib/supabase/service-role'
+import { getServiceClient } from '@/lib/supabase/service-role-core'
 
 const apply = process.argv.includes('--apply')
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
