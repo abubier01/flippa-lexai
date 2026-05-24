@@ -63,11 +63,18 @@ export async function POST(req: NextRequest) {
         .eq('id', contractId)
         .single(),
       getActivePlan(user.id),
+      // Count COMPLETED assistant turns (non-empty content) — not user rows.
+      // The pre-stream insert writes both a user row and an empty assistant
+      // placeholder; if streamText fails, the placeholder is never filled.
+      // Counting user rows would charge the quota for failed turns. Counting
+      // role='assistant' AND content<>'' charges only successful replies, which
+      // matches the user's mental model ("messages I got back").
       supabase
         .from('chat_messages')
         .select('*', { count: 'exact', head: true })
         .eq('contract_id', contractId)
-        .eq('role', 'user'),
+        .eq('role', 'assistant')
+        .neq('content', ''),
       supabase
         .from('contract_analyses')
         .select('*')
