@@ -46,4 +46,13 @@ describe('log', () => {
     expect(payload.userId).toBe('user-1')
     expect(payload.err.message).toBe('oops')
   })
+
+  it('redacts denylisted fields (top-level)', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    log.info('user.signin', { userId: 'u1', password: 'p4ssw0rd', apiKey: 'sk_test_abc' })
+    const payload = JSON.parse(spy.mock.calls[0][0] as string)
+    expect(payload.userId).toBe('u1')
+    expect(payload.password).toBe('[REDACTED]')
+    expect(payload.apiKey).toBe('[REDACTED]')
+  })
 })
