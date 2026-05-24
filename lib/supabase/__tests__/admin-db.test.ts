@@ -7,11 +7,16 @@ import { executeAdminSql } from '../admin-db'
 
 beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://abcdef.supabase.co')
-  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'srv-key')
+  // Default: exercise the preferred (ACCESS_TOKEN) path so the bulk of
+  // tests cover the happy bearer source. Fallback path is exercised in
+  // its own dedicated tests below.
+  vi.stubEnv('SUPABASE_ACCESS_TOKEN', 'pat-token')
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '')
 })
 
 afterEach(() => {
   vi.unstubAllEnvs()
+  vi.restoreAllMocks()
 })
 
 describe('executeAdminSql', () => {
@@ -29,7 +34,30 @@ describe('executeAdminSql', () => {
     expect(url).toBe('https://api.supabase.com/v1/projects/abcdef/database/query')
   })
 
-  it('sends Bearer token from SUPABASE_SERVICE_ROLE_KEY', async () => {
+  it('prefers SUPABASE_ACCESS_TOKEN as the Bearer token when set', async () => {
+    vi.stubEnv('SUPABASE_ACCESS_TOKEN', 'pat-token')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'srv-key')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve('{}'),
+    })
+
+    await executeAdminSql('SELECT 1', fetchMock)
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.headers.Authorization).toBe('Bearer pat-token')
+    // No fallback warning when ACCESS_TOKEN is present
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('falls back to SUPABASE_SERVICE_ROLE_KEY when only that is set', async () => {
+    vi.stubEnv('SUPABASE_ACCESS_TOKEN', '')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'srv-key')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -43,6 +71,44 @@ describe('executeAdminSql', () => {
     expect(init.headers['Content-Type']).toBe('application/json')
     expect(init.headers.Authorization).toBe('Bearer srv-key')
     expect(JSON.parse(init.body)).toEqual({ query: 'SELECT 1' })
+  })
+
+  it('emits a warn-level log when falling back to SUPABASE_SERVICE_ROLE_KEY', async () => {
+    vi.stubEnv('SUPABASE_ACCESS_TOKEN', '')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'srv-key')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve('{}'),
+    })
+
+    await executeAdminSql('SELECT 1', fetchMock)
+
+    expect(warnSpy).toHaveBeenCalledOnce()
+    const line = warnSpy.mock.calls[0][0] as string
+    const payload = JSON.parse(line)
+    expect(payload.level).toBe('warn')
+    expect(payload.msg).toContain('SUPABASE_SERVICE_ROLE_KEY')
+    expect(payload.msg).toContain('SUPABASE_ACCESS_TOKEN')
+  })
+
+  it('returns {ok: false} when neither SUPABASE_ACCESS_TOKEN nor SUPABASE_SERVICE_ROLE_KEY is set', async () => {
+    vi.stubEnv('SUPABASE_ACCESS_TOKEN', '')
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '')
+    const fetchMock = vi.fn()
+
+    const result = await executeAdminSql('SELECT 1', fetchMock)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.status).toBe(500)
+      expect(result.error).toMatch(/missing bearer token/)
+      expect(result.error).toMatch(/SUPABASE_ACCESS_TOKEN/)
+      expect(result.error).toMatch(/SUPABASE_SERVICE_ROLE_KEY/)
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('returns {ok: true, data} on 2xx response with JSON body', async () => {

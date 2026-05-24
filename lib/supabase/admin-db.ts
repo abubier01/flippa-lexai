@@ -1,12 +1,19 @@
 import 'server-only'
 
+import { log } from '@/lib/log'
+
 /**
  * Run a SQL statement via the Supabase Management API.
  * Use only for DDL or other ops the JS client can't perform.
  * Caller is responsible for SQL injection safety — do not pass user input.
  *
- * Auth: uses SUPABASE_SERVICE_ROLE_KEY as Bearer token against
- *   https://api.supabase.com/v1/projects/{project_ref}/database/query
+ * Auth: bearer token resolved in this preference order:
+ *   1. SUPABASE_ACCESS_TOKEN (Personal Access Token — what the Management
+ *      API expects per Supabase docs)
+ *   2. SUPABASE_SERVICE_ROLE_KEY (backward-compatible fallback; emits a
+ *      warn-level log when used)
+ *
+ * Endpoint: https://api.supabase.com/v1/projects/{project_ref}/database/query
  * The project ref is the subdomain of NEXT_PUBLIC_SUPABASE_URL.
  *
  * @param sql       — SQL statement(s) to execute
@@ -29,6 +36,26 @@ export async function executeAdminSql(
     }
   }
 
+  const accessToken = process.env.SUPABASE_ACCESS_TOKEN?.trim()
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+
+  let bearer: string
+  if (accessToken) {
+    bearer = accessToken
+  } else if (serviceRoleKey) {
+    log.warn(
+      '[admin-db] Using SUPABASE_SERVICE_ROLE_KEY as Management API bearer; SUPABASE_ACCESS_TOKEN preferred per Supabase docs.',
+    )
+    bearer = serviceRoleKey
+  } else {
+    return {
+      ok: false,
+      error:
+        'missing bearer token (set SUPABASE_ACCESS_TOKEN or SUPABASE_SERVICE_ROLE_KEY)',
+      status: 500,
+    }
+  }
+
   const projectRef = supabaseUrl
     .replace('https://', '')
     .replace('.supabase.co', '')
@@ -42,7 +69,7 @@ export async function executeAdminSql(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        Authorization: `Bearer ${bearer}`,
       },
       body: JSON.stringify({ query: sql }),
     })
