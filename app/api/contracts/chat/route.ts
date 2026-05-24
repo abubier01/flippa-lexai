@@ -7,6 +7,15 @@ import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
 import { logger } from '@/lib/log/request'
+import {
+  CHAT_CONTRACT_TEXT_MAX_CHARS,
+  CHAT_HISTORY_MESSAGES,
+  CHAT_LLM_MAX_OUTPUT_TOKENS,
+  CHAT_LLM_TEMPERATURE,
+  CHAT_RATE_LIMIT_MAX,
+  CHAT_RATE_LIMIT_WINDOW_MS,
+  CHAT_REPLY_MAX_CHARS,
+} from '@/lib/constants/chat-limits'
 
 export async function POST(req: NextRequest) {
   let userId: string | undefined
@@ -26,8 +35,8 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req)
     const limitResult = consumeRateLimit({
       key: `ai:chat:${user.id}:${ip}`,
-      limit: 60,
-      windowMs: 15 * 60 * 1000,
+      limit: CHAT_RATE_LIMIT_MAX,
+      windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
     })
     if (!limitResult.allowed) {
       return NextResponse.json(
@@ -74,7 +83,7 @@ export async function POST(req: NextRequest) {
         .eq('contract_id', contractId)
         .eq('role', 'user')
         .order('created_at', { ascending: true })
-        .limit(10),
+        .limit(CHAT_HISTORY_MESSAGES),
     ])
 
     const contract = contractRes.data
@@ -106,7 +115,7 @@ export async function POST(req: NextRequest) {
     const SCRUB_REGEX = /<<<UNTRUSTED-CONTRACT-[a-fA-F0-9-]+-(START|END)>>>/gi
     const scrub = (s: string) => s.replace(SCRUB_REGEX, '[REDACTED-SENTINEL]')
 
-    const rawContractText = scrub((contract.raw_text || '').slice(0, 8000))
+    const rawContractText = scrub((contract.raw_text || '').slice(0, CHAT_CONTRACT_TEXT_MAX_CHARS))
 
     const contractContext = `
 Contract Title: ${scrub(contract.title)}
@@ -152,10 +161,10 @@ Assistant:`
     const result = streamText({
       model: groq('llama-3.3-70b-versatile'),
       prompt,
-      temperature: 0.3,
-      maxOutputTokens: 1024,
+      temperature: CHAT_LLM_TEMPERATURE,
+      maxOutputTokens: CHAT_LLM_MAX_OUTPUT_TOKENS,
       onFinish: async ({ text }) => {
-        const reply = text.trim().slice(0, 8000)
+        const reply = text.trim().slice(0, CHAT_REPLY_MAX_CHARS)
         if (!reply) return
         const { error } = await supabase.from('chat_messages').insert([
           { contract_id: contractId, user_id: user.id, role: 'user', content: safeMessage },

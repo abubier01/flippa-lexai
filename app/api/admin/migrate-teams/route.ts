@@ -1,29 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdminAccess } from '@/lib/security/admin-guard'
-
-function getManagementUrl() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
-  if (!supabaseUrl) return null
-
-  const projectRef = supabaseUrl
-    .replace('https://', '')
-    .replace('.supabase.co', '')
-
-  return `https://api.supabase.com/v1/projects/${projectRef}/database/query`
-}
-
-async function runSQL(sql: string, managementUrl: string) {
-  const res = await fetch(managementUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-    },
-    body: JSON.stringify({ query: sql }),
-  })
-  const text = await res.text()
-  return { ok: res.ok, text }
-}
+import { executeAdminSql } from '@/lib/supabase/admin-db'
 
 const MIGRATIONS = [
   {
@@ -143,15 +120,14 @@ export async function POST(request: Request) {
   const denied = await requireAdminAccess(request)
   if (denied) return denied
 
-  const managementUrl = getManagementUrl()
-  if (!managementUrl) {
-    return NextResponse.json({ error: 'NEXT_PUBLIC_SUPABASE_URL is not configured' }, { status: 500 })
-  }
-
   const results = []
   for (const { label, sql } of MIGRATIONS) {
-    const { ok, text } = await runSQL(sql, managementUrl)
-    results.push({ label, status: ok ? 'ok' : 'error', ...(ok ? {} : { error: text }) })
+    const result = await executeAdminSql(sql)
+    results.push({
+      label,
+      status: result.ok ? 'ok' : 'error',
+      ...(result.ok ? {} : { error: result.error }),
+    })
   }
   const allOk = results.every(r => r.status === 'ok')
   return NextResponse.json({ success: allOk, results }, { status: allOk ? 200 : 207 })

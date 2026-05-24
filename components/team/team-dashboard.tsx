@@ -12,47 +12,12 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import RiskBadge from '@/components/contracts/risk-badge'
 import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
-
-interface Member {
-  id: string
-  user_id: string
-  role: 'owner' | 'admin' | 'member'
-  joined_at: string
-  profiles: { id: string; full_name: string | null; plan?: string }
-}
-
-interface Invite {
-  id: string
-  email: string
-  token: string
-  created_at: string
-  expires_at: string
-  status: string
-}
-
-interface SharedContract {
-  id: string
-  title: string
-  status: string
-  risk_score: number
-  created_at: string
-  user_id: string
-  contract_analyses: { risks: { severity: string }[]; summary?: string }[]
-}
-
-interface Analytics {
-  totalContracts: number
-  avgRisk: number
-  highRisks: number
-  mediumRisks: number
-  lowRisks: number
-  memberCount: number
-}
+import type { Member, Invite, SharedContract, Analytics, Team } from './types'
 
 interface Props {
   currentUserId: string
   profile: { plan: string; team_id: string | null; full_name: string | null } | null
-  team: { id: string; name: string; owner_id: string; created_at: string } | null
+  team: Team | null
   members: Member[]
   invites: Invite[]
   sharedContracts: SharedContract[]

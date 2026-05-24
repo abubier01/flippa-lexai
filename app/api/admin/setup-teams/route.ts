@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdminAccess } from '@/lib/security/admin-guard'
+import { executeAdminSql } from '@/lib/supabase/admin-db'
 
 // This route creates the team tables using individual Supabase operations
 // since we cannot run raw DDL through the JS client directly.
@@ -7,13 +8,6 @@ import { requireAdminAccess } from '@/lib/security/admin-guard'
 export async function POST(request: Request) {
   const denied = await requireAdminAccess(request)
   if (denied) return denied
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-  // Extract project ref from URL: https://<ref>.supabase.co
-  const projectRef = supabaseUrl.replace('https://', '').split('.')[0]
-  const managementUrl = `https://api.supabase.com/v1/projects/${projectRef}/database/query`
 
   const statements = [
     // teams table
@@ -131,27 +125,12 @@ export async function POST(request: Request) {
 
   const results: { sql: string; ok: boolean; error?: string }[] = []
 
-  // Run each statement individually via service role + pg workaround
-  // Since we can't run DDL through supabase-js, use the REST API
   for (const sql of statements) {
-    try {
-      const res = await fetch(`${supabaseUrl}/rest/v1/rpc/exec_sql`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-        },
-        body: JSON.stringify({ query: sql }),
-      })
-      if (res.ok) {
-        results.push({ sql: sql.slice(0, 60), ok: true })
-      } else {
-        const err = await res.text()
-        results.push({ sql: sql.slice(0, 60), ok: false, error: err })
-      }
-    } catch (e) {
-      results.push({ sql: sql.slice(0, 60), ok: false, error: String(e) })
+    const result = await executeAdminSql(sql)
+    if (result.ok) {
+      results.push({ sql: sql.slice(0, 60), ok: true })
+    } else {
+      results.push({ sql: sql.slice(0, 60), ok: false, error: result.error })
     }
   }
 

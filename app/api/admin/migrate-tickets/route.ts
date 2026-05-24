@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdminAccess } from '@/lib/security/admin-guard'
+import { executeAdminSql } from '@/lib/supabase/admin-db'
 
 const SQL = `
 CREATE TABLE IF NOT EXISTS public.support_tickets (
@@ -60,31 +61,11 @@ export async function POST(request: Request) {
   const denied = await requireAdminAccess(request)
   if (denied) return denied
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
-  if (!supabaseUrl) {
-    return NextResponse.json({ error: 'NEXT_PUBLIC_SUPABASE_URL is not configured' }, { status: 500 })
-  }
-  const projectRef = supabaseUrl.replace('https://', '').replace('.supabase.co', '')
+  const result = await executeAdminSql(SQL)
 
-  const res = await fetch(
-    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-      body: JSON.stringify({ query: SQL }),
-    }
-  )
-
-  const text = await res.text()
-  let data: unknown
-  try { data = JSON.parse(text) } catch { data = text }
-
-  if (!res.ok) {
-    return NextResponse.json({ error: data, status: res.status }, { status: 500 })
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error, status: result.status }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true, result: data })
+  return NextResponse.json({ success: true, result: result.data })
 }

@@ -8,6 +8,8 @@ vi.mock('@/lib/security/admin-guard', () => ({
   requireAdminAccess: vi.fn(),
 }))
 
+const rpcMock = vi.fn()
+
 vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn().mockReturnValue({
     from: vi.fn().mockReturnValue({
@@ -15,6 +17,7 @@ vi.mock('@supabase/supabase-js', () => ({
         limit: vi.fn().mockResolvedValue({ data: [], error: null }),
       }),
     }),
+    rpc: (...args: unknown[]) => rpcMock(...args),
   }),
 }))
 
@@ -32,6 +35,8 @@ beforeEach(() => {
     json: () => Promise.resolve({}),
     text: () => Promise.resolve(''),
   })
+  rpcMock.mockReset()
+  rpcMock.mockResolvedValue({ data: null, error: null })
   mockRequireAdminAccess.mockReset()
   stubAdminEnv({})
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co')
@@ -73,17 +78,15 @@ describe('POST /api/admin/migrate-blog', () => {
     expect(mockRequireAdminAccess).toHaveBeenCalledOnce()
   })
 
-  it('falls back to management API when exec_sql RPC returns !ok', async () => {
+  it('falls back to management API when exec_sql RPC returns an error', async () => {
     mockRequireAdminAccess.mockResolvedValue(null)
 
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'function exec_sql does not exist' } })
     fetchMock.mockImplementation((url: string) => {
-      if (url.includes('/rest/v1/rpc/exec_sql')) {
-        return Promise.resolve({ ok: false, json: () => Promise.resolve({}) })
-      }
       if (url.includes('api.supabase.com')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}), text: () => Promise.resolve('{}') })
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}), text: () => Promise.resolve('{}') })
     })
 
     const request = new Request('http://localhost/api/admin/migrate-blog', { method: 'POST' })
@@ -99,14 +102,12 @@ describe('POST /api/admin/migrate-blog', () => {
   it('records "Error" result when mgmt API also returns !ok', async () => {
     mockRequireAdminAccess.mockResolvedValue(null)
 
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'function exec_sql does not exist' } })
     fetchMock.mockImplementation((url: string) => {
-      if (url.includes('/rest/v1/rpc/exec_sql')) {
-        return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'forbidden' }) })
-      }
       if (url.includes('api.supabase.com')) {
-        return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'forbidden' }) })
+        return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'forbidden' }), text: () => Promise.resolve('{"error":"forbidden"}') })
       }
-      return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'forbidden' }) })
+      return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'forbidden' }), text: () => Promise.resolve('{"error":"forbidden"}') })
     })
 
     const request = new Request('http://localhost/api/admin/migrate-blog', { method: 'POST' })
@@ -118,10 +119,10 @@ describe('POST /api/admin/migrate-blog', () => {
     expect(body.results.every((r: string) => r.startsWith('Error:'))).toBe(true)
   })
 
-  it('records "Exception" when fetch throws', async () => {
+  it('records "Exception" when rpc throws', async () => {
     mockRequireAdminAccess.mockResolvedValue(null)
 
-    fetchMock.mockRejectedValue(new Error('network down'))
+    rpcMock.mockRejectedValue(new Error('network down'))
 
     const request = new Request('http://localhost/api/admin/migrate-blog', { method: 'POST' })
     const response = await POST(request)
