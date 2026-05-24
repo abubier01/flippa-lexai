@@ -7,14 +7,11 @@
 
 import 'dotenv/config'
 import Stripe from 'stripe'
-import { createClient } from '@supabase/supabase-js'
+import { getServiceClient } from '@/lib/supabase/service-role'
 
 const apply = process.argv.includes('--apply')
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' })
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabase = getServiceClient()
 
 const PRICE_BY_PLAN: Record<'pro' | 'team', string> = {
   pro: process.env.STRIPE_PRICE_PRO_MONTHLY!,
