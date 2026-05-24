@@ -15,7 +15,7 @@ import { NextRequest } from 'next/server'
 // Hoisted shared mock references
 // ---------------------------------------------------------------------------
 
-const { mockStreamText, makeSupabase } = vi.hoisted(() => {
+const { mockStreamText, makeSupabase, makeSupabaseV2 } = vi.hoisted(() => {
   const mockStreamText = vi.fn()
 
   const CONTRACT_DATA = {
@@ -140,7 +140,126 @@ const { mockStreamText, makeSupabase } = vi.hoisted(() => {
     return { supabase, insertMock }
   }
 
-  return { mockStreamText, makeSupabase }
+  /**
+   * Post-refactor supabase mock (Plan 4: chat persistence resilience).
+   *
+   * After the refactor, the chat route calls from() in this order:
+   *   1. contracts → .select().eq().single()                     → contract row
+   *   2. chat_messages → .select({count}).eq().eq().eq()        → { count: 0 } (quota check)
+   *   3. contract_analyses → .select().eq().single()             → analysis row
+   *   4. chat_messages → .select().eq().eq().order().limit()     → history rows
+   *   5. chat_messages → .insert([user, placeholder]).select('id, role')
+   *                                                              → [{ id, role }] (pre-stream)
+   *   6. chat_messages → .update({content}).eq('id', placeholderId)
+   *                                                              → { error } (in onFinish)
+   */
+  function makeSupabaseV2({
+    historyRows = [] as { role: string; content: string }[],
+    messageCount = 0,
+    contractData = CONTRACT_DATA as Record<string, unknown> | null,
+    analysisData = ANALYSIS_DATA as Record<string, unknown> | null,
+    insertResult = {
+      data: [
+        { id: 'msg-user-1', role: 'user' },
+        { id: 'msg-placeholder-1', role: 'assistant' },
+      ],
+      error: null as { message: string } | null,
+    },
+    updateResult = { error: null as { message: string } | null },
+  } = {}) {
+    // The .insert([...]).select('id, role') chain is awaited.
+    const selectAfterInsert = vi.fn().mockResolvedValue(insertResult)
+    const insertMock = vi.fn().mockReturnValue({ select: selectAfterInsert })
+
+    // The .update({...}).eq('id', placeholderId) chain is awaited.
+    const eqAfterUpdate = vi.fn().mockResolvedValue(updateResult)
+    const updateMock = vi.fn().mockReturnValue({ eq: eqAfterUpdate })
+
+    let callIndex = 0
+
+    const supabase = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'user-1' } },
+        }),
+      },
+      from: vi.fn().mockImplementation((table: string) => {
+        callIndex++
+        const idx = callIndex
+
+        if (table === 'contracts' && idx === 1) {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: contractData,
+              error: contractData ? null : { message: 'not found' },
+            }),
+          }
+        }
+
+        if (table === 'chat_messages' && idx === 2) {
+          const eqFn = vi.fn().mockImplementation(() => eqChainObj)
+          const eqChainObj = {
+            eq: eqFn,
+            then: (resolve: (v: { count: number }) => void) =>
+              Promise.resolve({ count: messageCount }).then(resolve),
+          }
+          return {
+            select: vi.fn().mockReturnValue(eqChainObj),
+          }
+        }
+
+        if (table === 'contract_analyses' && idx === 3) {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: analysisData,
+              error: null,
+            }),
+          }
+        }
+
+        if (table === 'chat_messages' && idx === 4) {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            order: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockResolvedValue({ data: historyRows, error: null }),
+          }
+        }
+
+        if (table === 'chat_messages' && idx === 5) {
+          // Pre-stream insert + select
+          return { insert: insertMock }
+        }
+
+        if (table === 'chat_messages' && idx === 6) {
+          // onFinish update
+          return { update: updateMock }
+        }
+
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+          single: vi.fn().mockResolvedValue({ data: null, error: null }),
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockResolvedValue({ data: [], error: null }),
+          }),
+          update: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ error: null }),
+          }),
+        }
+      }),
+    }
+
+    return { supabase, insertMock, selectAfterInsert, updateMock, eqAfterUpdate }
+  }
+
+  return { mockStreamText, makeSupabase, makeSupabaseV2 }
 })
 
 // ---------------------------------------------------------------------------
@@ -490,5 +609,83 @@ describe('POST /api/contracts/chat — contract metadata sentinel scrubbing', ()
 
     expect(prompt).not.toContain('AABBCCDD-0000-1111-2222-AABBCCDDEEFF')
     expect(prompt).toContain('[REDACTED-SENTINEL]')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Plan 4: Chat persistence resilience
+//
+// New architecture: insert user row + empty assistant placeholder BEFORE
+// streaming, then UPDATE the placeholder in onFinish. Pre-stream insert
+// failures surface as 500 (no stream started yet). onFinish UPDATE failures
+// are logged but non-fatal (response already streamed).
+// ---------------------------------------------------------------------------
+
+describe('POST /api/contracts/chat — Plan 4: pre-stream persistence resilience', () => {
+  it('returns 500 when pre-stream insert of user+placeholder rows fails', async () => {
+    const { supabase } = makeSupabaseV2({
+      insertResult: { data: null, error: { message: 'db down' } },
+    })
+    currentSupabase = supabase
+    // streamText should NOT be invoked on insert failure, but mock it just in case.
+    mockStreamText.mockReturnValueOnce({
+      toTextStreamResponse: vi.fn().mockReturnValue(new Response('ok')),
+    })
+
+    const res = await POST(buildRequest('What are the payment terms?'))
+
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).toMatch(/save/i)
+  })
+
+  it('updates the placeholder row with the final reply text in onFinish', async () => {
+    const { supabase, updateMock, eqAfterUpdate } = makeSupabaseV2()
+    currentSupabase = supabase
+
+    let onFinish: ((event: { text: string }) => Promise<void>) | undefined
+    mockStreamText.mockImplementationOnce(
+      (args: { onFinish?: (event: { text: string }) => Promise<void> }) => {
+        onFinish = args.onFinish
+        return { toTextStreamResponse: vi.fn().mockReturnValue(new Response('ok')) }
+      },
+    )
+
+    await POST(buildRequest('What are the payment terms?'))
+    await onFinish?.({ text: 'hello world' })
+
+    expect(updateMock).toHaveBeenCalledOnce()
+    const updateArgs = updateMock.mock.calls[0][0]
+    expect(updateArgs).toMatchObject({ content: 'hello world' })
+    // .eq('id', placeholderId)
+    expect(eqAfterUpdate).toHaveBeenCalledWith('id', 'msg-placeholder-1')
+  })
+
+  it('logs chat.persist.update_failed and does not crash when onFinish UPDATE fails', async () => {
+    const { supabase } = makeSupabaseV2({
+      updateResult: { error: { message: 'update failed' } },
+    })
+    currentSupabase = supabase
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    let onFinish: ((event: { text: string }) => Promise<void>) | undefined
+    mockStreamText.mockImplementationOnce(
+      (args: { onFinish?: (event: { text: string }) => Promise<void> }) => {
+        onFinish = args.onFinish
+        return { toTextStreamResponse: vi.fn().mockReturnValue(new Response('ok')) }
+      },
+    )
+
+    const res = await POST(buildRequest('What are the payment terms?'))
+    expect(res.status).toBe(200)
+
+    // Fire onFinish — should not throw.
+    await expect(onFinish?.({ text: 'reply text' })).resolves.toBeUndefined()
+
+    const errorCalls = errorSpy.mock.calls.map(c => String(c[0]))
+    expect(errorCalls.some(line => line.includes('chat.persist.update_failed'))).toBe(true)
+
+    errorSpy.mockRestore()
   })
 })
