@@ -1,9 +1,20 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { log } from '@/lib/log'
 
 describe('log', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('does not throw when context contains a circular reference', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const a: Record<string, unknown> = { name: 'a' }
+    a.self = a
+    expect(() => log.info('cycle', { node: a })).not.toThrow()
+    const payload = JSON.parse(spy.mock.calls[0][0] as string)
+    expect(payload.msg).toBe('cycle')
+    expect(payload.node.name).toBe('a')
+    expect(payload.node.self).toBe('[Circular]')
   })
 
   it('emits JSON entries with level, message, timestamp, and context', () => {
