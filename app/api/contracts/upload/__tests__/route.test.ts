@@ -196,7 +196,10 @@ beforeEach(() => {
     }
     return { single: vi.fn().mockResolvedValue({ data: null, error: null }) }
   })
-  // Reset insert mock to default success
+  // Reset insert mock: clear call history so "not.toHaveBeenCalled"
+  // assertions don't see calls bleeding in from earlier tests, then restore
+  // the default success implementation.
+  mockFromChain.insert.mockClear()
   mockFromChain.insert.mockReturnValue({
     select: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: { id: 'contract-id-1' }, error: null }),
@@ -604,6 +607,77 @@ describe('POST /api/contracts/upload — server-side size caps', () => {
 // ---------------------------------------------------------------------------
 // Rate-limit tests (audit finding #6)
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Unsupported file types (legacy .doc, unknown) return 415 instead of
+// silently inserting a placeholder text body (P3 hardening).
+// ---------------------------------------------------------------------------
+
+describe('POST /api/contracts/upload — unsupported file types return 415', () => {
+  function buildLegacyDocRequest(): NextRequest {
+    const form = new FormData()
+    form.set('title', 'Legacy Word doc')
+    const blob = new Blob(['\xD0\xCF\x11\xE0 legacy doc bytes'], {
+      type: 'application/msword',
+    })
+    const file = new File([blob], 'old-contract.doc', { type: 'application/msword' })
+    form.set('file', file)
+    return new NextRequest('http://localhost/api/contracts/upload', {
+      method: 'POST',
+      body: form,
+    })
+  }
+
+  function buildUnknownTypeRequest(): NextRequest {
+    const form = new FormData()
+    form.set('title', 'Mystery file')
+    const blob = new Blob(['random bytes'], { type: 'application/octet-stream' })
+    const file = new File([blob], 'contract.xyz', { type: 'application/octet-stream' })
+    form.set('file', file)
+    return new NextRequest('http://localhost/api/contracts/upload', {
+      method: 'POST',
+      body: form,
+    })
+  }
+
+  it('returns 415 for a legacy .doc file with an actionable message', async () => {
+    const res = await POST(buildLegacyDocRequest())
+    const body = await res.json()
+
+    expect(res.status).toBe(415)
+    expect(body.error).toMatch(/legacy \.doc/i)
+    expect(body.error).toMatch(/docx|pdf/i)
+  })
+
+  it('does not insert a contract row when a .doc is rejected with 415', async () => {
+    await POST(buildLegacyDocRequest())
+    expect(mockFromChain.insert).not.toHaveBeenCalled()
+  })
+
+  it('releases the quota slot when a .doc is rejected with 415', async () => {
+    await POST(buildLegacyDocRequest())
+    expect(getReleaseCalls()).toBe(1)
+  })
+
+  it('returns 415 for an unknown file type with an actionable message', async () => {
+    const res = await POST(buildUnknownTypeRequest())
+    const body = await res.json()
+
+    expect(res.status).toBe(415)
+    expect(body.error).toMatch(/unsupported file type/i)
+    expect(body.error).toMatch(/pdf.*docx.*txt|pdf.*txt|docx/i)
+  })
+
+  it('does not insert a contract row when an unknown type is rejected with 415', async () => {
+    await POST(buildUnknownTypeRequest())
+    expect(mockFromChain.insert).not.toHaveBeenCalled()
+  })
+
+  it('releases the quota slot when an unknown type is rejected with 415', async () => {
+    await POST(buildUnknownTypeRequest())
+    expect(getReleaseCalls()).toBe(1)
+  })
+})
 
 describe('POST /api/contracts/upload — rate limiting', () => {
   it('returns 429 with correct error and Retry-After header when rate limit is exceeded', async () => {

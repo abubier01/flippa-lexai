@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
 
     type UploadResult =
       | { status: 422; error: string }
+      | { status: 415; error: string }
       | { id: string; truncated: boolean }
 
     const claimResult = await withQuotaClaim<UploadResult>(
@@ -158,11 +159,28 @@ export async function POST(req: NextRequest) {
               }
             }
           } else if (fileNameLower.endsWith('.doc')) {
-            // Legacy .doc files - not supported by mammoth, return message
-            rawText = `[Legacy DOC file uploaded: ${file.name}]\n\nNote: Legacy .doc format is not fully supported. Please convert to .docx or paste the text directly for best results.`
+            // Legacy .doc files - not supported by mammoth. Reject with 415
+            // instead of inserting a placeholder body that downstream code
+            // would analyze as if it were the real contract.
+            return {
+              ok: false,
+              value: {
+                status: 415 as const,
+                error:
+                  'Legacy .doc format not supported. Please save as .docx, .pdf, or paste the text directly.',
+              },
+            }
           } else {
-            // Unknown format
-            rawText = `[File uploaded: ${file.name}]\n\nThis file type is not fully supported. Please upload PDF, DOCX, or TXT files, or paste the contract text directly.`
+            // Unknown format - reject with 415 rather than silently accepting
+            // a placeholder body (audit P3 hardening).
+            return {
+              ok: false,
+              value: {
+                status: 415 as const,
+                error:
+                  'Unsupported file type. Please upload PDF, DOCX, or TXT, or paste the contract text directly.',
+              },
+            }
           }
         } else {
           // text is guaranteed non-null here (the !file && !text guard above returned early)
@@ -212,7 +230,7 @@ export async function POST(req: NextRequest) {
 
     const out = claimResult.result
     if ('status' in out) {
-      return NextResponse.json({ error: out.error }, { status: 422 })
+      return NextResponse.json({ error: out.error }, { status: out.status })
     }
 
     const headers: Record<string, string> = out.truncated
