@@ -61,14 +61,12 @@ export async function POST(req: NextRequest) {
         .from('contracts')
         .select('*')
         .eq('id', contractId)
-        .eq('user_id', user.id)
         .single(),
       getActivePlan(user.id),
       supabase
         .from('chat_messages')
         .select('*', { count: 'exact', head: true })
         .eq('contract_id', contractId)
-        .eq('user_id', user.id)
         .eq('role', 'user'),
       supabase
         .from('contract_analyses')
@@ -89,6 +87,17 @@ export async function POST(req: NextRequest) {
     const contract = contractRes.data
 
     if (!contract) return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
+
+    const isOwner = contract.user_id === user.id
+    if (!isOwner) {
+      return NextResponse.json(
+        {
+          error: 'Chat is read-only for shared team contracts. Ask the contract owner to send messages.',
+          kind: 'chat_readonly',
+        },
+        { status: 403 }
+      )
+    }
 
     const plan = active.tier
     const limits = PLAN_LIMITS[plan]
