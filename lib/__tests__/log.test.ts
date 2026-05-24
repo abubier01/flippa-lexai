@@ -118,4 +118,55 @@ describe('log', () => {
     expect(payload.count).toBe(3)
     expect(payload.ok).toBe(true)
   })
+
+  describe('LOG_LEVEL filtering', () => {
+    const originalLevel = process.env.LOG_LEVEL
+    afterEach(() => {
+      if (originalLevel === undefined) delete process.env.LOG_LEVEL
+      else process.env.LOG_LEVEL = originalLevel
+    })
+
+    it('LOG_LEVEL=warn suppresses info and debug but emits warn', () => {
+      process.env.LOG_LEVEL = 'warn'
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const infoSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      log.info('should-be-suppressed')
+      log.debug('also-suppressed')
+      log.warn('should-fire')
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(infoSpy).not.toHaveBeenCalled()
+    })
+
+    it('LOG_LEVEL=error suppresses everything except error', () => {
+      process.env.LOG_LEVEL = 'error'
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      log.debug('no')
+      log.info('no')
+      log.warn('no')
+      log.error('yes')
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).not.toHaveBeenCalled()
+      expect(logSpy).not.toHaveBeenCalled()
+    })
+
+    it('default (LOG_LEVEL unset) is info — debug suppressed, info fires', () => {
+      delete process.env.LOG_LEVEL
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      log.debug('hidden')
+      log.info('shown')
+      expect(logSpy).toHaveBeenCalledTimes(1)
+      const payload = JSON.parse(logSpy.mock.calls[0][0] as string)
+      expect(payload.msg).toBe('shown')
+    })
+
+    it('LOG_LEVEL=debug emits all levels (debug + info both fire)', () => {
+      process.env.LOG_LEVEL = 'debug'
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      log.debug('d')
+      log.info('i')
+      expect(logSpy).toHaveBeenCalledTimes(2)
+    })
+  })
 })
