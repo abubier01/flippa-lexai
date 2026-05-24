@@ -183,6 +183,22 @@ const { mockStreamText, makeSupabase } = vi.hoisted(() => {
 
 let currentSupabase: ReturnType<typeof makeSupabase>['supabase']
 
+// next/server's `after()` requires an active request scope at runtime. In
+// vitest there is no Next request lifecycle, so calling it throws. Replace
+// with an inline invocation — the production semantic we care about (the
+// UPDATE eventually runs) is preserved, and the test can still observe its
+// side effects via `await onFinish(...)` because the mocked supabase methods
+// resolve synchronously into already-resolved promises.
+vi.mock('next/server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next/server')>()
+  return {
+    ...actual,
+    after: (fn: () => unknown) => {
+      void fn()
+    },
+  }
+})
+
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn().mockImplementation(() => Promise.resolve(currentSupabase)),
 }))

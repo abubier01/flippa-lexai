@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@/lib/supabase/server'
 import { createGroq } from '@ai-sdk/groq'
@@ -207,17 +207,23 @@ Assistant:`
       onFinish: async ({ text }) => {
         const reply = text.trim().slice(0, CHAT_REPLY_MAX_CHARS)
         if (!reply) return
-        const { error: updateErr } = await supabase
-          .from('chat_messages')
-          .update({ content: reply })
-          .eq('id', placeholder.id)
-        if (updateErr) {
-          rlog.error('chat.persist.update_failed', {
-            err: new Error(updateErr.message),
-            userId: user.id,
-            placeholderId: placeholder.id,
-          })
-        }
+        // Wrap in after() so the UPDATE runs to completion even if the client
+        // disconnects mid-stream. On Vercel serverless, without after() the
+        // function instance can be torn down before this async work finishes,
+        // leaving an orphaned empty assistant placeholder behind.
+        after(async () => {
+          const { error: updateErr } = await supabase
+            .from('chat_messages')
+            .update({ content: reply })
+            .eq('id', placeholder.id)
+          if (updateErr) {
+            rlog.error('chat.persist.update_failed', {
+              err: new Error(updateErr.message),
+              userId: user.id,
+              placeholderId: placeholder.id,
+            })
+          }
+        })
       },
     })
     return result.toTextStreamResponse()
