@@ -9,6 +9,9 @@ function serializeContext(ctx?: LogContext): LogContext | undefined {
   }
 }
 
+// Field-name substrings redacted to '[REDACTED]' before serialization.
+// Case-insensitive; matched anywhere in the key. Extend with care — over-broad
+// substrings (e.g. 'id') would mask debugging info.
 const REDACT_SUBSTRINGS = [
   'password', 'token', 'secret', 'apikey', 'api_key',
   'authorization', 'cookie', 'sessionid',
