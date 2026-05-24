@@ -2,7 +2,12 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import TeamDashboard from '@/components/team/team-dashboard'
+import TeamDashboard, {
+  type Member,
+  type Invite,
+  type SharedContract,
+  type Analytics,
+} from '@/components/team/team-dashboard'
 import { hasTeamAccess } from '@/lib/plan/access'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
@@ -46,11 +51,11 @@ export default async function TeamPage() {
   // Use access.teamId (resolved from subscription or membership) as the team lookup key.
   const effectiveTeamId = access.teamId ?? profile?.team_id
 
-  let team = null
-  let members: unknown[] = []
-  let invites: unknown[] = []
-  let sharedContracts: unknown[] = []
-  let teamAnalytics = null
+  let team: { id: string; name: string; owner_id: string; created_at: string } | null = null
+  let members: Member[] = []
+  let invites: Invite[] = []
+  let sharedContracts: SharedContract[] = []
+  let teamAnalytics: Analytics | null = null
 
   if (effectiveTeamId) {
     const [teamRes, membersRes, invitesRes, contractsRes] = await Promise.all([
@@ -64,7 +69,12 @@ export default async function TeamPage() {
         .order('created_at', { ascending: false }),
     ])
 
-    const rawMembers: { user_id: string; id: string; role: string; joined_at: string }[] = membersRes.data || []
+    const rawMembers = (membersRes.data ?? []) as Array<{
+      user_id: string
+      id: string
+      role: 'owner' | 'admin' | 'member'
+      joined_at: string
+    }>
 
     // Fetch member profiles separately — avoids the FK join 400 error
     const userIds = rawMembers.map(m => m.user_id).filter(Boolean)
@@ -72,23 +82,23 @@ export default async function TeamPage() {
       ? await service.from('profiles').select('id, full_name, plan').in('id', userIds)
       : { data: [] as { id: string; full_name: string | null; plan: string }[] }
 
-    const profileMap = Object.fromEntries((profileRows || []).map(p => [p.id, p]))
+    const profileMap = Object.fromEntries((profileRows ?? []).map(p => [p.id, p]))
 
-    team = teamRes.data
+    team = teamRes.data as typeof team
     members = rawMembers.map(m => ({
       ...m,
       profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'free' },
     }))
-    invites = invitesRes.data || []
-    sharedContracts = contractsRes.data || []
+    invites = (invitesRes.data ?? []) as Invite[]
+    sharedContracts = (contractsRes.data ?? []) as SharedContract[]
 
     // Compute team analytics
-    const analyses = sharedContracts.flatMap((c: any) => c.contract_analyses || [])
+    const analyses = sharedContracts.flatMap(c => c.contract_analyses ?? [])
     let totalRisk = 0, riskCount = 0
     let high = 0, medium = 0, low = 0
 
     for (const a of analyses) {
-      const risks = (a.risks as { severity: string }[]) || []
+      const risks = a.risks ?? []
       for (const r of risks) {
         if (r.severity === 'high') high++
         else if (r.severity === 'medium') medium++
@@ -116,9 +126,9 @@ export default async function TeamPage() {
       currentUserId={user.id}
       profile={profile}
       team={team}
-      members={members as any}
-      invites={invites as any}
-      sharedContracts={sharedContracts as any}
+      members={members}
+      invites={invites}
+      sharedContracts={sharedContracts}
       teamAnalytics={teamAnalytics}
     />
   )
