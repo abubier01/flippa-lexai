@@ -17,11 +17,10 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   //     own plan/team_id to render their UI shell.
   //   - contracts_select_own + contracts_select_team: caller sees their own
   //     contracts AND any contract shared with a team they belong to.
-  //   - analyses_select_own / messages_select_own (auth.uid() = user_id):
-  //     only rows where the row's user_id matches the caller. Since the
-  //     analysis/messages rows carry the OWNER's user_id (not the viewer's),
-  //     a team viewer reading a shared contract will get null/empty here
-  //     until team-scoped policies are added (see "team-viewer gap" below).
+  //   - analyses_select_own + analyses_select_team / messages_select_own +
+  //     messages_select_team: owners read by auth.uid() = user_id; team
+  //     viewers read rows whose parent contract is shared_with_team = TRUE
+  //     and whose team they belong to (added in scripts/008_team_analyses_messages_rls.sql).
   const [profileRes, contractRes, access, analysisRes, messagesRes] = await Promise.all([
     supabase.from('profiles').select('plan, team_id').eq('id', user.id).single(),
     supabase.from('contracts').select('*').eq('id', id).single(),
@@ -41,12 +40,6 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
     contract.team_id === access.teamId
 
   if (!isOwner && !isTeamMember) notFound()
-
-  // Team-viewer gap: analyses_select_own and messages_select_own only permit
-  // auth.uid() = user_id, so a team viewer will receive null/[] here. This is
-  // acceptable (Option A) — the analysis tabs render empty-state gracefully and
-  // the chat tab is gated client-side by isTeamViewer. Follow-up PR should add
-  // analyses_select_team and messages_select_team RLS policies.
 
   if (contract.status === 'pending' || contract.status === 'processing') {
     return <ContractProcessing contractId={id} contractTitle={contract.title} status={contract.status} />
