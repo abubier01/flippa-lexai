@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getServiceClient } from '@/lib/supabase/service-role'
+import { executeAdminSql } from '@/lib/supabase/admin-db'
 import { requireAdminAccess } from '@/lib/security/admin-guard'
 
 export async function POST(request: Request) {
   const denied = await requireAdminAccess(request)
   if (denied) return denied
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const supabase = getServiceClient()
 
   const statements = [
     `CREATE TABLE IF NOT EXISTS public.blog_posts (
@@ -84,31 +82,12 @@ export async function POST(request: Request) {
 
   for (const sql of statements) {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/exec_sql`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY!,
-          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
-        },
-        body: JSON.stringify({ sql }),
-      })
+      const { error: rpcError } = await supabase.rpc('exec_sql', { sql })
 
-      if (!res.ok) {
+      if (rpcError) {
         // exec_sql might not exist — use the management API
-        const mgmtRes = await fetch(
-          `https://api.supabase.com/v1/projects/${process.env.SUPABASE_PROJECT_ID}/database/query`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}`,
-            },
-            body: JSON.stringify({ query: sql }),
-          }
-        )
-        const d = await mgmtRes.json()
-        results.push(mgmtRes.ok ? 'OK via mgmt API' : `Error: ${JSON.stringify(d)}`)
+        const mgmt = await executeAdminSql(sql)
+        results.push(mgmt.ok ? 'OK via mgmt API' : `Error: ${mgmt.error}`)
       } else {
         results.push('OK via rpc')
       }

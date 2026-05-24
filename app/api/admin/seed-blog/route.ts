@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getServiceClient } from '@/lib/supabase/service-role'
 import { requireAdminAccess } from '@/lib/security/admin-guard'
 
 export async function POST(request: Request) {
   const denied = await requireAdminAccess(request)
   if (denied) return denied
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const supabase = getServiceClient()
 
   // First ensure the table has RLS disabled for service role or set up the right policy
   const posts = [
