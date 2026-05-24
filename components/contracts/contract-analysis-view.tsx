@@ -130,7 +130,7 @@ export default function ContractAnalysisView({ contract, analysis, initialMessag
           <ContractClausesTab analysis={analysis} />
         </TabsContent>
         <TabsContent value="chat">
-          <ContractChatTab contractId={contract.id} initialMessages={initialMessages} />
+          <ContractChatTab contractId={contract.id} initialMessages={initialMessages} readOnly={isTeamViewer} />
         </TabsContent>
       </Tabs>
     </div>
