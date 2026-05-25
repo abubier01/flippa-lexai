@@ -217,8 +217,7 @@ vi.mock('@/lib/plan-limits', () => ({
 }))
 
 vi.mock('@/lib/security/rate-limit', () => ({
-  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
-  consumeRateLimit: vi.fn().mockReturnValue({
+  consumeRateLimit: vi.fn().mockResolvedValue({
     allowed: true,
     limit: 60,
     remaining: 59,

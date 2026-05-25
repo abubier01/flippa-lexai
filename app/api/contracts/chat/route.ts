@@ -5,15 +5,13 @@ import { createGroq } from '@ai-sdk/groq'
 import { streamText } from 'ai'
 import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
-import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
 import { logger } from '@/lib/log/request'
 import {
   CHAT_CONTRACT_TEXT_MAX_CHARS,
   CHAT_HISTORY_MESSAGES,
   CHAT_LLM_MAX_OUTPUT_TOKENS,
   CHAT_LLM_TEMPERATURE,
-  CHAT_RATE_LIMIT_MAX,
-  CHAT_RATE_LIMIT_WINDOW_MS,
   CHAT_REPLY_MAX_CHARS,
 } from '@/lib/constants/chat-limits'
 
@@ -36,19 +34,6 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     userId = user.id
-
-    const ip = getClientIp(req)
-    const limitResult = consumeRateLimit({
-      key: `ai:chat:${user.id}:${ip}`,
-      limit: CHAT_RATE_LIMIT_MAX,
-      windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
-    })
-    if (!limitResult.allowed) {
-      return NextResponse.json(
-        { error: 'Rate limit exceeded. Please try again shortly.' },
-        { status: 429, headers: rateLimitHeaders(limitResult) }
-      )
-    }
 
     const { contractId, message } = await req.json()
     if (!contractId || !message) {
@@ -95,6 +80,18 @@ export async function POST(req: NextRequest) {
         .order('created_at', { ascending: true })
         .limit(CHAT_HISTORY_MESSAGES),
     ])
+
+    const rl = await consumeRateLimit({
+      action: 'chat',
+      userId: user.id,
+      tier: active.tier,
+    })
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests', limitReached: true },
+        { status: 429, headers: rateLimitHeaders(rl) },
+      )
+    }
 
     const contract = contractRes.data
 
