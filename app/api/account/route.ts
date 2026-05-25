@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { log } from '@/lib/log'
 
 export async function DELETE(req: NextRequest) {
   const supabase = await createClient()
@@ -95,7 +96,7 @@ export async function DELETE(req: NextRequest) {
   const service = getServiceClient()
   const { error: deleteError } = await service.auth.admin.deleteUser(user.id)
   if (deleteError) {
-    console.error('[account/delete] error:', deleteError.message)
+    log.error('account delete failed', { err: deleteError, subsystem: 'supabase', op: 'account.delete' })
     return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 })
   }
 
