@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasTeamAccess } from '@/lib/plan/access'
 import { getServiceClient } from '@/lib/supabase/service-role'
+import { log } from '@/lib/log'
 
 export async function GET() {
   const supabase = await createClient()
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (teamErr || !team) {
-    console.error('[team] create team error:', teamErr?.message)
+    log.error('team create failed', { err: teamErr, subsystem: 'supabase', op: 'team.create' })
     return NextResponse.json({ error: teamErr?.message || 'Failed to create team.' }, { status: 500 })
   }
 
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest) {
     .insert({ team_id: team.id, user_id: user.id, role: 'owner' })
 
   if (memberErr) {
-    console.error('[team] add member error:', memberErr.message)
+    log.error('team add member failed', { err: memberErr, subsystem: 'supabase', op: 'team.addMember' })
   }
 
   // Update profile with team_id
@@ -119,7 +120,7 @@ export async function POST(req: NextRequest) {
     .eq('id', user.id)
 
   if (profileErr) {
-    console.error('[team] update profile error:', profileErr.message)
+    log.error('profile update failed', { err: profileErr, subsystem: 'supabase', op: 'profile.update' })
   }
 
   // Fetch member + profile separately (FK join causes 400 with service role)
