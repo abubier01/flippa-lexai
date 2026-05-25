@@ -38,9 +38,12 @@ const { mockStreamText, makeSupabase } = vi.hoisted(() => {
   /**
    * Build a fresh supabase mock for each test (Plan 4 architecture).
    *
-   * The chat route calls from() in this order:
+   * getActivePlan is mocked at module level and never calls from() directly,
+   * so it does not affect the call-index tracking below.
+   *
+   * The chat route calls from() in this order (after the rate-limit gate):
    *   1. contracts → .select().eq().single()                        → contract row
-   *   2. chat_messages → .select({count}).eq().eq().eq()           → { count: 0 } (quota check)
+   *   2. chat_messages → .select({count}).eq().eq().neq()          → { count: 0 } (quota check)
    *   3. contract_analyses → .select().eq().single()                → analysis row
    *   4. chat_messages → .select().eq().eq().order().limit()        → history rows
    *   5. chat_messages → .insert([user, placeholder]).select('id, role')
@@ -217,8 +220,7 @@ vi.mock('@/lib/plan-limits', () => ({
 }))
 
 vi.mock('@/lib/security/rate-limit', () => ({
-  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
-  consumeRateLimit: vi.fn().mockReturnValue({
+  consumeRateLimit: vi.fn().mockResolvedValue({
     allowed: true,
     limit: 60,
     remaining: 59,

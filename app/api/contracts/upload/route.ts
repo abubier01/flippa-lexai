@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
-import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
 import { ANALYZE_TRUNCATION_CHARS } from '@/lib/llm/limits'
 import { logger } from '@/lib/log/request'
 import { withQuotaClaim } from '@/lib/quota'
@@ -34,16 +34,16 @@ export async function POST(req: NextRequest) {
     userId = user.id
     const ulog = rlog.child({ userId })
 
-    const ip = getClientIp(req)
-    const limitResult = consumeRateLimit({
-      key: `contract:upload:${user.id}:${ip}`,
-      limit: 10,
-      windowMs: 60 * 60 * 1000,  // 1 hour
+    const active = await getActivePlan(user.id)
+    const rl = await consumeRateLimit({
+      action: 'upload',
+      userId: user.id,
+      tier: active.tier,
     })
-    if (!limitResult.allowed) {
+    if (!rl.allowed) {
       return NextResponse.json(
-        { error: 'Too many uploads. Please try again later.' },
-        { status: 429, headers: rateLimitHeaders(limitResult) }
+        { error: 'Too many uploads', limitReached: true },
+        { status: 429, headers: rateLimitHeaders(rl) },
       )
     }
 
@@ -82,7 +82,6 @@ export async function POST(req: NextRequest) {
     // month rolled over, increments it if under the limit, and returns whether
     // the call is allowed. This replaces the old read-modify-write pattern
     // (audit finding #7).
-    const active = await getActivePlan(user.id)
     const plan = active.tier
     const limits = PLAN_LIMITS[plan]
 

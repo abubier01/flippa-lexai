@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getServiceClient } from '@/lib/supabase/service-role'
-import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
 
 export async function DELETE(req: NextRequest) {
   const supabase = await createClient()
@@ -13,16 +13,17 @@ export async function DELETE(req: NextRequest) {
   }
 
   // Aggressive rate limit — this endpoint is destructive and high-value to attackers.
-  const ip = getClientIp(req)
-  const limitResult = consumeRateLimit({
-    key: `account-delete:${user.id}:${ip}`,
-    limit: 5,
-    windowMs: 60 * 60 * 1000,
+  const rl = await consumeRateLimit({
+    action: 'account-delete',
+    userId: user.id,
+    // Anti-abuse flat-limit action — tier doesn't affect the cap.
+    // Pass 'free' as a sentinel; the limit is the same across all tiers.
+    tier: 'free',
   })
-  if (!limitResult.allowed) {
+  if (!rl.allowed) {
     return NextResponse.json(
-      { error: 'Too many attempts. Please try again later.' },
-      { status: 429, headers: rateLimitHeaders(limitResult) },
+      { error: 'Too many delete requests', limitReached: true },
+      { status: 429, headers: rateLimitHeaders(rl) },
     )
   }
 

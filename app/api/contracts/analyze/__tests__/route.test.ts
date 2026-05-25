@@ -95,9 +95,12 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn().mockImplementation(() => Promise.resolve(currentSupabase)),
 }))
 
+vi.mock('@/lib/plan/access', () => ({
+  getActivePlan: vi.fn().mockResolvedValue({ tier: 'pro', status: 'active' }),
+}))
+
 vi.mock('@/lib/security/rate-limit', () => ({
-  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
-  consumeRateLimit: vi.fn().mockReturnValue({
+  consumeRateLimit: vi.fn().mockResolvedValue({
     allowed: true,
     limit: 12,
     remaining: 11,

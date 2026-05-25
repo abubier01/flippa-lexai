@@ -7,12 +7,6 @@
  * happens in one file.
  */
 
-/** Max chat requests allowed per (user, ip) inside the rate-limit window. */
-export const CHAT_RATE_LIMIT_MAX = 60
-
-/** Rate-limit window length in milliseconds (15 minutes). */
-export const CHAT_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
-
 /**
  * Number of past user-turn messages re-fed as context.
  *
