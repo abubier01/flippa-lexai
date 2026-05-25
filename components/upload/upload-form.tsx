@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
+import { useRateLimitCountdown } from '@/hooks/use-rate-limit-countdown'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 export default function UploadForm() {
   const router = useRouter()
@@ -19,8 +21,12 @@ export default function UploadForm() {
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
-  const [limitReached, setLimitReached] = useState(false)
+  const [retryAfter, setRetryAfter] = useState<{ seconds: number; limit: string | null } | null>(null)
   const [activeTab, setActiveTab] = useState('file')
+  const countdown = useRateLimitCountdown(
+    retryAfter?.seconds ?? 0,
+    () => setRetryAfter(null),
+  )
   const fileRef = useRef<HTMLInputElement>(null)
 
   const handleFile = useCallback((f: File) => {
@@ -62,14 +68,18 @@ export default function UploadForm() {
       }
 
       const res = await fetch('/api/contracts/upload', { method: 'POST', body: formData })
+
+      if (res.status === 429) {
+        const seconds = Number(res.headers.get('retry-after') ?? '0')
+        const limit = res.headers.get('x-ratelimit-limit')
+        setRetryAfter({ seconds, limit })
+        setLoading(false)
+        return
+      }
+
       const data = await res.json()
 
       if (!res.ok) {
-        if (data.limitReached) {
-          setLimitReached(true)
-          setLoading(false)
-          return
-        }
         throw new Error(data.error || 'Upload failed')
       }
 
@@ -96,32 +106,6 @@ export default function UploadForm() {
     } finally {
       setAnalyzing(false)
     }
-  }
-
-  if (limitReached) {
-    return (
-      <div className="bg-card rounded-xl border border-border p-8 text-center">
-        <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-          <Zap className="w-7 h-7 text-destructive" />
-        </div>
-        <h3 className="text-lg font-semibold text-foreground mb-2">Monthly Limit Reached</h3>
-        <p className="text-muted-foreground text-sm mb-6 max-w-md mx-auto">
-          You&apos;ve used all 5 contract analyses for this month on the Free plan. 
-          Upgrade to Pro for unlimited analyses and AI chat.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Button asChild>
-            <Link href="/settings">
-              <Zap className="w-4 h-4 mr-1.5" />
-              Upgrade to Pro
-            </Link>
-          </Button>
-          <Button variant="outline" onClick={() => setLimitReached(false)}>
-            Go Back
-          </Button>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -227,7 +211,19 @@ export default function UploadForm() {
         </p>
       </div>
 
-      <Button type="submit" size="lg" className="w-full h-12" disabled={loading || analyzing}>
+      {countdown.isActive && (
+        <Alert variant="destructive">
+          <AlertTitle>Upload limit reached</AlertTitle>
+          <AlertDescription>
+            {retryAfter?.limit
+              ? `Limit: ${retryAfter.limit} uploads per hour. `
+              : ''}
+            Try again in {countdown.label}.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Button type="submit" size="lg" className="w-full h-12" disabled={countdown.isActive || loading || analyzing}>
         {loading ? (
           <>
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />

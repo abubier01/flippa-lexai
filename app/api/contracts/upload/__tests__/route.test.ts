@@ -87,10 +87,9 @@ vi.mock('@/lib/plan-limits', () => ({
 }))
 
 // Rate-limit mock — default: allowed. Individual tests can override with
-// mockReturnValueOnce to simulate the limit being hit.
+// mockResolvedValueOnce to simulate the limit being hit.
 vi.mock('@/lib/security/rate-limit', () => ({
-  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
-  consumeRateLimit: vi.fn().mockReturnValue({
+  consumeRateLimit: vi.fn().mockResolvedValue({
     allowed: true,
     limit: 10,
     remaining: 9,
@@ -681,7 +680,7 @@ describe('POST /api/contracts/upload — unsupported file types return 415', () 
 
 describe('POST /api/contracts/upload — rate limiting', () => {
   it('returns 429 with correct error and Retry-After header when rate limit is exceeded', async () => {
-    consumeRateLimitMock.mockReturnValueOnce({
+    consumeRateLimitMock.mockResolvedValueOnce({
       allowed: false,
       limit: 10,
       remaining: 0,
@@ -703,7 +702,7 @@ describe('POST /api/contracts/upload — rate limiting', () => {
     const body = await res.json()
 
     expect(res.status).toBe(429)
-    expect(body.error).toBe('Too many uploads. Please try again later.')
+    expect(body.error).toBe('Too many uploads')
     expect(res.headers.get('Retry-After')).toBe('3600')
   })
 })
