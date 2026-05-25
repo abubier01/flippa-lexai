@@ -224,6 +224,8 @@ describe('consumeRateLimit (Upstash path)', () => {
     })
     expect(payload.user_id_hash).toBeDefined()
     expect(payload.user_id_hash).not.toBe('u_failopen')
+    expect(payload.err_stack).toBeDefined()    // NEW
+    expect(typeof payload.err_stack).toBe('string')  // NEW
     errorSpy.mockRestore()
   })
 })

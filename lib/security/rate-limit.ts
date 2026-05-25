@@ -50,6 +50,8 @@ function buildKey(action: RateLimitAction, userId: string): string {
   return `ai:${action}:${userId}`
 }
 
+// 32-bit prefix (8 hex chars) of sha256(userId). Collision acceptable
+// for fail-open diagnostics; this is not a security boundary.
 function shortUserHash(userId: string): string {
   return createHash('sha256').update(userId).digest('hex').slice(0, 8)
 }
@@ -141,6 +143,7 @@ async function getLimiter(action: RateLimitAction, tier: PlanType, policy: Polic
     limiter: Ratelimit.slidingWindow(policy.limit, `${policy.windowMs} ms` as `${number} ms`),
     prefix: `ratelimit:${action}:${tier}`,
     analytics: false,
+    timeout: 2000, // fail-open after 2s; catch() handles the synthetic-allow path
   }) as LimiterInstance
 
   limiterCache.set(cacheKey, limiter)
@@ -167,13 +170,14 @@ async function consumeUpstash(
         : Math.max(1, Math.ceil((result.reset - now) / 1000)),
     }
   } catch (err) {
-    const e = err as Error
+    const e = err instanceof Error ? err : new Error(String(err))
     console.error('rate_limit_backend_failure', {
       event: 'rate_limit_backend_failure',
       severity: 'warning',
       category: 'rate_limiter',
       err: e.message,
       err_name: e.name,
+      err_stack: e.stack,
       action,
       tier,
       user_id_hash: shortUserHash(userId),
