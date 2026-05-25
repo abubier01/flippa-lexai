@@ -1,13 +1,14 @@
 /**
  * Unit tests for DELETE /api/contracts/[id]
  *
- * Covers all 6 cases from the spec:
+ * Covers all 7 cases from the spec:
  *   1. 401 — no authenticated user
  *   2. 429 — rate limit exceeded
- *   3. 404 — count === 0 (RLS blocks, no matching row)
- *   4. 404 — count === null (defensive branch, documented supabase-js edge case)
- *   5. 500 — database error
- *   6. 200 — successful delete
+ *   3. 503 — rate limiter degraded fail-closed path
+ *   4. 404 — count === 0 (RLS blocks, no matching row)
+ *   5. 404 — count === null (defensive branch, documented supabase-js edge case)
+ *   6. 500 — database error
+ *   7. 200 — successful delete
  *
  * Audit finding #1 closed: right-to-erasure DELETE endpoint.
  */
@@ -192,6 +193,27 @@ describe('DELETE /api/contracts/[id]', () => {
     expect(res.headers.get('Retry-After')).toBe('3600')
   })
 
+  it('returns 503 when rate limit fails closed (degraded=true)', async () => {
+    consumeRateLimitMock.mockResolvedValueOnce({
+      allowed: false,
+      degraded: true,
+      limit: 60,
+      remaining: 0,
+      resetAt: Date.now() + 15 * 60 * 1000,
+      retryAfterSeconds: 900,
+    })
+
+    createClientMock.mockResolvedValueOnce(mockSupabase)
+
+    const [req, ctx] = buildDeleteRequest()
+    const res = await DELETE(req, ctx)
+    const body = await res.json()
+
+    expect(res.status).toBe(503)
+    expect(body.error).toMatch(/temporarily unavailable|try again/i)
+    expect(body.limitReached).toBe(false)
+  })
+
   // Case 3: count === 0 (RLS blocked — row not found or not owned by user)
   it('returns 404 when count is 0 (RLS blocks or row does not exist)', async () => {
     setDeleteResult({ error: null, count: 0 })
@@ -239,4 +261,5 @@ describe('DELETE /api/contracts/[id]', () => {
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
   })
+
 })

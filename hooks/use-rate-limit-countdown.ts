@@ -20,8 +20,10 @@ export function useRateLimitCountdown(
   onExpire?: () => void,
 ): RateLimitCountdownState {
   const initial = Math.max(0, Math.floor(retryAfterSeconds))
-  const [secondsRemaining, setSecondsRemaining] = useState(initial)
-  const expiredRef = useRef(initial === 0)
+  const [timerState, setTimerState] = useState(() => ({
+    sourceSeconds: initial,
+    secondsRemaining: initial,
+  }))
   const onExpireRef = useRef(onExpire)
 
   // Keep the ref in sync so the interval always reads the latest callback
@@ -33,22 +35,24 @@ export function useRateLimitCountdown(
 
   useEffect(() => {
     if (initial === 0) return
+    let didExpire = false
+    let remaining = initial
     const interval = setInterval(() => {
-      setSecondsRemaining((prev) => {
-        const next = prev - 1
-        if (next <= 0) {
-          clearInterval(interval)
-          if (!expiredRef.current) {
-            expiredRef.current = true
-            onExpireRef.current?.()
-          }
-          return 0
+      remaining = Math.max(0, remaining - 1)
+      setTimerState({ sourceSeconds: initial, secondsRemaining: remaining })
+      if (remaining <= 0) {
+        clearInterval(interval)
+        if (!didExpire) {
+          didExpire = true
+          onExpireRef.current?.()
         }
-        return next
-      })
+      }
     }, 1000)
     return () => clearInterval(interval)
   }, [initial])
+
+  const secondsRemaining =
+    timerState.sourceSeconds === initial ? timerState.secondsRemaining : initial
 
   return {
     secondsRemaining,

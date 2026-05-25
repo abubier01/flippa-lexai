@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     userId = user.id
+    const ulog = rlog.child({ userId })
 
     const { contractId, message } = await req.json()
     if (!contractId || !message) {
@@ -44,7 +45,12 @@ export async function POST(req: NextRequest) {
     // firing the 4-way DB fan-out. Every other route (analyze, upload,
     // contract-delete, account-delete) follows this pattern; chat was the
     // outlier that wasted those queries on already-throttled requests.
-    const active = await getActivePlan(user.id)
+    let active: Awaited<ReturnType<typeof getActivePlan>> = { tier: 'free', status: 'fallback' }
+    try {
+      active = await getActivePlan(user.id)
+    } catch (err) {
+      ulog.warn('chat.plan_lookup_failed_fallback_free', { err })
+    }
 
     const rl = await consumeRateLimit({
       action: 'chat',

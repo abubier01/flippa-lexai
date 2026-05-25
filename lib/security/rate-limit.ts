@@ -7,6 +7,7 @@ type Bucket = { count: number; resetAt: number }
 type Store = Map<string, Bucket>
 
 const STORE_KEY = '__lexaiRateLimitStore'
+const PROD_NO_UPSTASH_WARNED_KEY = '__lexaiRateLimitProdNoUpstashWarned'
 const MAX_BUCKETS = 10_000
 
 function getStore(): Store {
@@ -182,6 +183,17 @@ async function consumeUpstash(
       tier,
       user_id_hash: shortUserHash(userId),
     })
+    if (policy.failMode === 'closed') {
+      const resetAt = now + policy.windowMs
+      return {
+        allowed: false,
+        limit: policy.limit,
+        remaining: 0,
+        resetAt,
+        retryAfterSeconds: Math.max(1, Math.ceil(policy.windowMs / 1000)),
+        degraded: true,
+      }
+    }
     return {
       allowed: true,
       limit: policy.limit,
@@ -211,6 +223,23 @@ export async function consumeRateLimit(input: RateLimitInput): Promise<RateLimit
 
   if (useUpstash) {
     return consumeUpstash(action, userId, tier, policy, now)
+  }
+
+  // In production, in-memory fallback under-enforces limits across instances.
+  // Emit one loud process-level warning for operator visibility.
+  if (process.env.NODE_ENV === 'production') {
+    const g = globalThis as Record<string, unknown>
+    if (!g[PROD_NO_UPSTASH_WARNED_KEY]) {
+      g[PROD_NO_UPSTASH_WARNED_KEY] = true
+      console.error('rate_limit_backend_missing', {
+        event: 'rate_limit_backend_missing',
+        severity: 'error',
+        category: 'rate_limiter',
+        mode: 'in_memory_fallback',
+        has_kv_rest_api_url: Boolean(process.env.KV_REST_API_URL),
+        has_kv_rest_api_token: Boolean(process.env.KV_REST_API_TOKEN),
+      })
+    }
   }
   return consumeInMemory(action, userId, policy, now)
 }

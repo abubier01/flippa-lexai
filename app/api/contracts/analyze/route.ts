@@ -27,7 +27,12 @@ export async function POST(req: NextRequest) {
     userId = user.id
     const ulog = rlog.child({ userId })
 
-    const active = await getActivePlan(user.id)
+    let active: Awaited<ReturnType<typeof getActivePlan>> = { tier: 'free', status: 'fallback' }
+    try {
+      active = await getActivePlan(user.id)
+    } catch (err) {
+      ulog.warn('analyze.plan_lookup_failed_fallback_free', { err })
+    }
     const rl = await consumeRateLimit({
       action: 'analyze',
       userId: user.id,
