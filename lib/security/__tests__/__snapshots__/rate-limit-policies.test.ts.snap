@@ -2,6 +2,20 @@
 
 exports[`POLICIES > matches the documented starter values 1`] = `
 {
+  "account-delete": {
+    "free": {
+      "limit": 5,
+      "windowMs": 900000,
+    },
+    "pro": {
+      "limit": 5,
+      "windowMs": 900000,
+    },
+    "team": {
+      "limit": 5,
+      "windowMs": 900000,
+    },
+  },
   "analyze": {
     "free": {
       "limit": 12,
@@ -27,6 +41,20 @@ exports[`POLICIES > matches the documented starter values 1`] = `
     },
     "team": {
       "limit": 240,
+      "windowMs": 900000,
+    },
+  },
+  "contract-delete": {
+    "free": {
+      "limit": 60,
+      "windowMs": 900000,
+    },
+    "pro": {
+      "limit": 60,
+      "windowMs": 900000,
+    },
+    "team": {
+      "limit": 60,
       "windowMs": 900000,
     },
   },
