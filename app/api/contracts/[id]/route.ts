@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { log } from '@/lib/log'
 
 export async function DELETE(
   req: NextRequest,
@@ -35,7 +36,7 @@ export async function DELETE(
     .eq('user_id', user.id)
 
   if (error) {
-    console.error('[contracts/delete] error:', error.message)
+    log.error('contract delete failed', { err: error, subsystem: 'supabase', op: 'contracts.delete' })
     return NextResponse.json({ error: 'Failed to delete contract' }, { status: 500 })
   }
 
