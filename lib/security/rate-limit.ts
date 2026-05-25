@@ -35,7 +35,7 @@ export type RateLimitResult = {
   remaining: number
   resetAt: number
   retryAfterSeconds: number
-  degraded?: boolean
+  degraded?: boolean // set to true on Upstash fail-open path (added in Task 4)
 }
 
 function resolvePolicy(action: RateLimitAction, tier: PlanType): Policy {
@@ -78,7 +78,7 @@ function consumeInMemory(
       limit: policy.limit,
       remaining: 0,
       resetAt: bucket.resetAt,
-      retryAfterSeconds: Math.max(0, Math.ceil((bucket.resetAt - now) / 1000)),
+      retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
     }
   }
 
@@ -105,10 +105,13 @@ export async function consumeRateLimit(input: RateLimitInput): Promise<RateLimit
 }
 
 export function rateLimitHeaders(result: RateLimitResult): HeadersInit {
-  return {
+  const base: Record<string, string> = {
     'x-ratelimit-limit': String(result.limit),
     'x-ratelimit-remaining': String(result.remaining),
     'x-ratelimit-reset': String(Math.floor(result.resetAt / 1000)),
-    'retry-after': String(result.retryAfterSeconds),
   }
+  if (result.retryAfterSeconds > 0) {
+    base['retry-after'] = String(result.retryAfterSeconds)
+  }
+  return base
 }
