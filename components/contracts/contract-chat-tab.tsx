@@ -29,6 +29,7 @@ export default function ContractChatTab({ contractId, initialMessages, readOnly 
   const [loading, setLoading] = useState(false)
   const [retryAfter, setRetryAfter] = useState<{ seconds: number; limit: string | null } | null>(null)
   const [quotaReached, setQuotaReached] = useState(false)
+  const [quotaMessage, setQuotaMessage] = useState<string | null>(null)
   const countdown = useRateLimitCountdown(
     retryAfter?.seconds ?? 0,
     () => setRetryAfter(null),
@@ -77,6 +78,7 @@ export default function ContractChatTab({ contractId, initialMessages, readOnly 
         const data = await res.json().catch(() => ({} as { error?: string; limitReached?: boolean }))
         if (data.limitReached) {
           setQuotaReached(true)
+          setQuotaMessage(data.error ?? null)
           setMessages((prev) => prev.slice(0, -1))
           setLoading(false)
           return
@@ -214,7 +216,7 @@ export default function ContractChatTab({ contractId, initialMessages, readOnly 
             <div className="flex items-center gap-3">
               <Zap className="w-4 h-4 text-destructive shrink-0" />
               <p className="text-sm text-foreground">
-                You&apos;ve reached the 20 message limit for this contract.
+                {quotaMessage ?? "You’ve reached your message limit for this contract."}
               </p>
             </div>
             <Button asChild size="sm">

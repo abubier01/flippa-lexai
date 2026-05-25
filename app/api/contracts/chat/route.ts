@@ -40,9 +40,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'contractId and message are required' }, { status: 400 })
     }
 
+    // Fetch the user's plan first so we can gate on the rate-limit BEFORE
+    // firing the 4-way DB fan-out. Every other route (analyze, upload,
+    // contract-delete, account-delete) follows this pattern; chat was the
+    // outlier that wasted those queries on already-throttled requests.
+    const active = await getActivePlan(user.id)
+
+    const rl = await consumeRateLimit({
+      action: 'chat',
+      userId: user.id,
+      tier: active.tier,
+    })
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests', limitReached: true },
+        { status: 429, headers: rateLimitHeaders(rl) },
+      )
+    }
+
     const [
       contractRes,
-      active,
       messageCountRes,
       analysisRes,
       historyRes,
@@ -52,7 +69,6 @@ export async function POST(req: NextRequest) {
         .select('*')
         .eq('id', contractId)
         .single(),
-      getActivePlan(user.id),
       // Count COMPLETED assistant turns (non-empty content) — not user rows.
       // The pre-stream insert writes both a user row and an empty assistant
       // placeholder; if streamText fails, the placeholder is never filled.
@@ -80,18 +96,6 @@ export async function POST(req: NextRequest) {
         .order('created_at', { ascending: true })
         .limit(CHAT_HISTORY_MESSAGES),
     ])
-
-    const rl = await consumeRateLimit({
-      action: 'chat',
-      userId: user.id,
-      tier: active.tier,
-    })
-    if (!rl.allowed) {
-      return NextResponse.json(
-        { error: 'Too many requests', limitReached: true },
-        { status: 429, headers: rateLimitHeaders(rl) },
-      )
-    }
 
     const contract = contractRes.data
 
