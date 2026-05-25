@@ -209,6 +209,7 @@ Assistant:`
     const placeholder = inserted.find(r => r.role === 'assistant')
     if (!placeholder) {
       rlog.error('chat.persist.placeholder_missing', {
+        err: new Error('placeholder row missing after insert'),
         userId: user.id,
         subsystem: 'supabase',
         op: 'chat_messages.insert',
