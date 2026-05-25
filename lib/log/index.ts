@@ -1,3 +1,5 @@
+import * as Sentry from '@sentry/nextjs'
+
 type Level = 'debug' | 'info' | 'warn' | 'error'
 type LogContext = Record<string, unknown>
 
@@ -67,6 +69,45 @@ function emit(level: Level, msg: string, ctx?: LogContext) {
   if (level === 'error') console.error(line)
   else if (level === 'warn') console.warn(line)
   else console.log(line)
+
+  if (level === 'error') {
+    forwardToSentry(msg, ctx, safeCtx)
+  }
+}
+
+// Forward redacted error events to Sentry. Errors with an `err: Error` field
+// in their context route to `captureException` (preserves stack-based
+// fingerprinting); errors without one route to `captureMessage`. The redacted
+// (`safeCtx`) payload is attached as `extra`; a fixed set of context fields
+// is surfaced as Sentry `tags` for filtering.
+function forwardToSentry(
+  msg: string,
+  originalCtx: LogContext | undefined,
+  safeCtx: LogContext | undefined,
+) {
+  const tags = extractTags(safeCtx)
+  const extra = (safeCtx ?? {}) as Record<string, unknown>
+  const err = originalCtx?.err
+  if (err instanceof Error) {
+    Sentry.captureException(err, { tags, extra })
+  } else {
+    Sentry.captureMessage(msg, { level: 'error', tags, extra })
+  }
+}
+
+// Pull a fixed set of string-typed keys out of the redacted context to attach
+// as Sentry tags (which are indexed and filterable). Non-string values are
+// skipped so we never widen Sentry's tag-value type contract.
+const SENTRY_TAG_KEYS = ['subsystem', 'backend', 'provider', 'op', 'event_type'] as const
+
+function extractTags(safeCtx: LogContext | undefined): Record<string, string> {
+  if (!safeCtx) return {}
+  const tags: Record<string, string> = {}
+  for (const key of SENTRY_TAG_KEYS) {
+    const val = safeCtx[key]
+    if (typeof val === 'string') tags[key] = val
+  }
+  return tags
 }
 
 type Logger = {
