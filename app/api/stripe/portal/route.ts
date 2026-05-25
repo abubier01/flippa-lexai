@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripe } from '@/lib/stripe'
+import { log } from '@/lib/log'
 
 export async function POST(_req: NextRequest) {
   const supabase = await createClient()
@@ -29,8 +30,7 @@ export async function POST(_req: NextRequest) {
     })
     return NextResponse.json({ url: session.url })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Stripe error'
-    console.error('[stripe-portal] failed:', message)
+    log.error('stripe portal failed', { err, subsystem: 'stripe', op: 'portal.create' })
     return NextResponse.json({ error: 'Failed to open billing portal' }, { status: 502 })
   }
 }
