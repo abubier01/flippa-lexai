@@ -37,6 +37,17 @@ describe('log', () => {
     expect(payload.err.stack).toEqual(expect.any(String))
   })
 
+  it('serializes Error objects for warn and info logs (not just error)', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    log.warn('handler.warned', { err: new Error('warn-boom') })
+    log.info('handler.noted', { err: new Error('info-boom') })
+    const warnPayload = JSON.parse(warnSpy.mock.calls[0][0] as string)
+    const infoPayload = JSON.parse(logSpy.mock.calls[0][0] as string)
+    expect(warnPayload.err).toMatchObject({ message: 'warn-boom', name: 'Error' })
+    expect(infoPayload.err).toMatchObject({ message: 'info-boom', name: 'Error' })
+  })
+
   it('child logger merges base context', () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const child = log.child({ requestId: 'req-1', route: 'stripe.webhook' })

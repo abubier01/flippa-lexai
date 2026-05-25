@@ -60,7 +60,8 @@ function thresholdLevel(): number {
 
 function emit(level: Level, msg: string, ctx?: LogContext) {
   if (LEVEL_ORDER[level] < thresholdLevel()) return
-  const safeCtx = ctx ? (redact(ctx) as LogContext) : undefined
+  const serialized = serializeContext(ctx)
+  const safeCtx = serialized ? (redact(serialized) as LogContext) : undefined
   const entry = { level, msg, ts: new Date().toISOString(), ...safeCtx }
   const line = safeStringify(entry)
   if (level === 'error') console.error(line)
@@ -82,7 +83,7 @@ function build(base: LogContext = {}): Logger {
     debug: (msg, ctx) => emit('debug', msg, withBase(ctx)),
     info: (msg, ctx) => emit('info', msg, withBase(ctx)),
     warn: (msg, ctx) => emit('warn', msg, withBase(ctx)),
-    error: (msg, ctx) => emit('error', msg, serializeContext(withBase(ctx))),
+    error: (msg, ctx) => emit('error', msg, withBase(ctx)),
     child: (next) => build(withBase(next)),
   }
 }
