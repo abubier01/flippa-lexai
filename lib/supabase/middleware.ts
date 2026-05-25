@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import * as Sentry from '@sentry/nextjs'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
@@ -28,6 +29,15 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  // ID-only Sentry user context (no email, no username — see PII policy).
+  // The null branch clears stale context on warm Vercel function instances
+  // so anonymous requests don't inherit a prior user's id.
+  if (user?.id) {
+    Sentry.setUser({ id: user.id })
+  } else {
+    Sentry.setUser(null)
+  }
 
   const protectedPaths = ['/dashboard', '/contracts', '/upload', '/reports', '/settings', '/team', '/upgrade']
   const isProtected = protectedPaths.some(p => request.nextUrl.pathname.startsWith(p))
