@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { createClient } from '@/lib/supabase/server'
 import { createGroq } from '@ai-sdk/groq'
 import { generateText } from 'ai'
-import { consumeRateLimit, getClientIp, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { getActivePlan } from '@/lib/plan/access'
 import { ANALYZE_TRUNCATION_CHARS } from '@/lib/llm/limits'
 import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 import { AnalysisSchema } from '@/lib/llm/schemas'
@@ -26,16 +27,16 @@ export async function POST(req: NextRequest) {
     userId = user.id
     const ulog = rlog.child({ userId })
 
-    const ip = getClientIp(req)
-    const limitResult = consumeRateLimit({
-      key: `ai:analyze:${user.id}:${ip}`,
-      limit: 12,
-      windowMs: 60 * 60 * 1000,
+    const active = await getActivePlan(user.id)
+    const rl = await consumeRateLimit({
+      action: 'analyze',
+      userId: user.id,
+      tier: active.tier,
     })
-    if (!limitResult.allowed) {
+    if (!rl.allowed) {
       return NextResponse.json(
-        { error: 'Rate limit exceeded. Please try again shortly.' },
-        { status: 429, headers: rateLimitHeaders(limitResult) }
+        { error: 'Too many analyses', limitReached: true },
+        { status: 429, headers: rateLimitHeaders(rl) },
       )
     }
 

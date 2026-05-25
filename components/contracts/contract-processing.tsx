@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Cpu } from 'lucide-react'
+import { useRateLimitCountdown } from '@/hooks/use-rate-limit-countdown'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 export default function ContractProcessing({ contractId, contractTitle, status }: {
   contractId: string
@@ -11,6 +13,11 @@ export default function ContractProcessing({ contractId, contractTitle, status }
 }) {
   const router = useRouter()
   const [step, setStep] = useState('Connecting to AI…')
+  const [retryAfter, setRetryAfter] = useState<{ seconds: number; limit: string | null } | null>(null)
+  const countdown = useRateLimitCountdown(
+    retryAfter?.seconds ?? 0,
+    () => setRetryAfter(null),
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -26,6 +33,12 @@ export default function ContractProcessing({ contractId, contractTitle, status }
             body: JSON.stringify({ contractId }),
           })
           if (!cancelled) {
+            if (res.status === 429) {
+              const seconds = Number(res.headers.get('retry-after') ?? '0')
+              const limit = res.headers.get('x-ratelimit-limit')
+              setRetryAfter({ seconds, limit })
+              return
+            }
             if (res.ok) {
               setStep('Done! Loading results…')
             } else {
@@ -62,10 +75,23 @@ export default function ContractProcessing({ contractId, contractTitle, status }
       <p className="text-muted-foreground mb-2 max-w-sm">
         Our AI is reading and analyzing <strong className="text-foreground">{contractTitle}</strong>. This usually takes under 15 seconds.
       </p>
-      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-4">
-        <Loader2 className="w-4 h-4 animate-spin text-primary" />
-        <span>{step}</span>
-      </div>
+      {countdown.isActive && (
+        <Alert variant="destructive" className="mt-4 max-w-sm text-left">
+          <AlertTitle>Analysis limit reached</AlertTitle>
+          <AlertDescription>
+            {retryAfter?.limit
+              ? `Limit: ${retryAfter.limit} analyses per hour. `
+              : ''}
+            Try again in {countdown.label}.
+          </AlertDescription>
+        </Alert>
+      )}
+      {!countdown.isActive && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-4">
+          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+          <span>{step}</span>
+        </div>
+      )}
     </div>
   )
 }
