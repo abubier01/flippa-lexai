@@ -10,7 +10,7 @@ describe('scrubSentryEvent', () => {
         data: { prompt: 'sensitive content', email: 'a@b.com' },
         headers: { host: 'example.com' },
       },
-    } as ErrorEvent
+    } as unknown as ErrorEvent
     const out = scrubSentryEvent(event)
     expect(out?.request?.data).toBeUndefined()
   })
@@ -27,7 +27,7 @@ describe('scrubSentryEvent', () => {
           'x-custom': 'should-be-stripped',
         },
       },
-    } as ErrorEvent
+    } as unknown as ErrorEvent
     const out = scrubSentryEvent(event)
     expect(out?.request?.headers).toEqual({
       host: 'example.com',
@@ -39,7 +39,7 @@ describe('scrubSentryEvent', () => {
   it('strips query string from request.url, preserves path', () => {
     const event = {
       request: { url: 'https://example.com/api/x?email=a@b.com&token=xyz' },
-    } as ErrorEvent
+    } as unknown as ErrorEvent
     const out = scrubSentryEvent(event)
     expect(out?.request?.url).toBe('https://example.com/api/x')
   })
