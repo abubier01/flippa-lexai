@@ -71,7 +71,12 @@ function emit(level: Level, msg: string, ctx?: LogContext) {
   else console.log(line)
 
   if (level === 'error') {
-    forwardToSentry(msg, ctx, safeCtx)
+    try {
+      forwardToSentry(msg, ctx, safeCtx)
+    } catch {
+      // Observability must never break the caller. A throw here would convert
+      // log.error(...) into a fatal — disastrous inside catch blocks. Swallow.
+    }
   }
 }
 
