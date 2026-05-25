@@ -1,6 +1,7 @@
 import 'server-only'
 import { createHash } from 'crypto'
 import type { PlanType } from '@/lib/plan-limits'
+import { log } from '@/lib/log'
 import { getPolicy, POLICIES, type RateLimitAction, type Policy } from './rate-limit-policies'
 
 type Bucket = { count: number; resetAt: number }
@@ -42,7 +43,12 @@ export type RateLimitResult = {
 function resolvePolicy(action: RateLimitAction, tier: PlanType): Policy {
   const candidate = POLICIES[action]?.[tier]
   if (candidate) return candidate
-  console.warn('rate_limit_unknown_tier', { action, tier })
+  log.warn('rate_limit_unknown_tier', {
+    subsystem: 'rate-limit',
+    event: 'rate_limit_unknown_tier',
+    action,
+    tier,
+  })
   return getPolicy(action, 'free')
 }
 
