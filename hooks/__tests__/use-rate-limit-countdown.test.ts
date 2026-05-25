@@ -61,4 +61,50 @@ describe('useRateLimitCountdown', () => {
       vi.advanceTimersByTime(5000)
     }).not.toThrow()
   })
+
+  it('does not restart the interval when onExpire identity changes between renders', () => {
+    // Caller passes a fresh arrow function each render — the hook must not
+    // tear down and recreate the interval, or the countdown will stutter.
+    const { result, rerender } = renderHook(
+      ({ onExpire }: { onExpire: () => void }) =>
+        useRateLimitCountdown(5, onExpire),
+      { initialProps: { onExpire: () => {} } },
+    )
+
+    expect(result.current.secondsRemaining).toBe(5)
+
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(result.current.secondsRemaining).toBe(4)
+
+    // Re-render with a NEW function identity for onExpire
+    rerender({ onExpire: () => {} })
+
+    // If the effect re-ran (the trap), the interval was cleared and restarted
+    // from the current secondsRemaining of 4 — we'd see 4 still after another
+    // 1000ms because a fresh setInterval hasn't fired yet. The fix ensures
+    // the interval keeps ticking.
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(result.current.secondsRemaining).toBe(3)
+
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(result.current.secondsRemaining).toBe(2)
+  })
+
+  it('uses the latest onExpire when the timer fires, even after re-renders', () => {
+    const firstOnExpire = vi.fn()
+    const secondOnExpire = vi.fn()
+    const { rerender } = renderHook(
+      ({ onExpire }: { onExpire: () => void }) =>
+        useRateLimitCountdown(2, onExpire),
+      { initialProps: { onExpire: firstOnExpire } },
+    )
+
+    act(() => { vi.advanceTimersByTime(500) })
+    // Caller swaps the callback mid-countdown
+    rerender({ onExpire: secondOnExpire })
+
+    act(() => { vi.advanceTimersByTime(2000) })
+    expect(firstOnExpire).not.toHaveBeenCalled()
+    expect(secondOnExpire).toHaveBeenCalledTimes(1)
+  })
 })
