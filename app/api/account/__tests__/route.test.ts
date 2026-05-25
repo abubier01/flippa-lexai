@@ -79,8 +79,7 @@ vi.mock('@/lib/supabase/service-role', () => ({
 
 // Rate-limit mock — default: allowed
 vi.mock('@/lib/security/rate-limit', () => ({
-  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
-  consumeRateLimit: vi.fn().mockReturnValue({
+  consumeRateLimit: vi.fn().mockResolvedValue({
     allowed: true,
     limit: 5,
     remaining: 4,
@@ -175,7 +174,7 @@ describe('DELETE /api/account', () => {
       json: async () => ({ access_token: 'tok' }),
     })
     // Reset rate limit to allowed
-    consumeRateLimitMock.mockReturnValue({
+    consumeRateLimitMock.mockResolvedValue({
       allowed: true,
       limit: 5,
       remaining: 4,
@@ -213,7 +212,7 @@ describe('DELETE /api/account', () => {
 
   // Case 2: Rate limit exceeded
   it('returns 429 when rate limit is exceeded', async () => {
-    consumeRateLimitMock.mockReturnValueOnce({
+    consumeRateLimitMock.mockResolvedValueOnce({
       allowed: false,
       limit: 5,
       remaining: 0,
@@ -225,7 +224,7 @@ describe('DELETE /api/account', () => {
     const body = await res.json()
 
     expect(res.status).toBe(429)
-    expect(body.error).toMatch(/too many attempts/i)
+    expect(body.error).toMatch(/too many delete requests/i)
   })
 
   // Case 3: Active paid subscription

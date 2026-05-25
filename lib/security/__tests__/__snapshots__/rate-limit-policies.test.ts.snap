@@ -1,0 +1,76 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`POLICIES > matches the documented starter values 1`] = `
+{
+  "account-delete": {
+    "free": {
+      "limit": 5,
+      "windowMs": 900000,
+    },
+    "pro": {
+      "limit": 5,
+      "windowMs": 900000,
+    },
+    "team": {
+      "limit": 5,
+      "windowMs": 900000,
+    },
+  },
+  "analyze": {
+    "free": {
+      "limit": 12,
+      "windowMs": 3600000,
+    },
+    "pro": {
+      "limit": 24,
+      "windowMs": 3600000,
+    },
+    "team": {
+      "limit": 48,
+      "windowMs": 3600000,
+    },
+  },
+  "chat": {
+    "free": {
+      "limit": 60,
+      "windowMs": 900000,
+    },
+    "pro": {
+      "limit": 120,
+      "windowMs": 900000,
+    },
+    "team": {
+      "limit": 240,
+      "windowMs": 900000,
+    },
+  },
+  "contract-delete": {
+    "free": {
+      "limit": 60,
+      "windowMs": 900000,
+    },
+    "pro": {
+      "limit": 60,
+      "windowMs": 900000,
+    },
+    "team": {
+      "limit": 60,
+      "windowMs": 900000,
+    },
+  },
+  "upload": {
+    "free": {
+      "limit": 10,
+      "windowMs": 3600000,
+    },
+    "pro": {
+      "limit": 20,
+      "windowMs": 3600000,
+    },
+    "team": {
+      "limit": 40,
+      "windowMs": 3600000,
+    },
+  },
+}
+`;

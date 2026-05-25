@@ -62,10 +62,9 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 // Rate-limit mock — default: allowed. Individual tests override with
-// mockReturnValueOnce to simulate the limit being hit.
+// mockResolvedValueOnce to simulate the limit being hit.
 vi.mock('@/lib/security/rate-limit', () => ({
-  getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
-  consumeRateLimit: vi.fn().mockReturnValue({
+  consumeRateLimit: vi.fn().mockResolvedValue({
     allowed: true,
     limit: 60,
     remaining: 59,
@@ -145,7 +144,7 @@ describe('DELETE /api/contracts/[id]', () => {
     vi.clearAllMocks()
     resetEqCount()
     // Restore default rate limit (allowed) after each test
-    consumeRateLimitMock.mockReturnValue({
+    consumeRateLimitMock.mockResolvedValue({
       allowed: true,
       limit: 60,
       remaining: 59,
@@ -173,7 +172,7 @@ describe('DELETE /api/contracts/[id]', () => {
 
   // Case 2: Rate limit exceeded
   it('returns 429 when rate limit is exceeded', async () => {
-    consumeRateLimitMock.mockReturnValueOnce({
+    consumeRateLimitMock.mockResolvedValueOnce({
       allowed: false,
       limit: 60,
       remaining: 0,
@@ -189,7 +188,7 @@ describe('DELETE /api/contracts/[id]', () => {
     const body = await res.json()
 
     expect(res.status).toBe(429)
-    expect(body.error).toMatch(/too many requests/i)
+    expect(body.error).toMatch(/too many delete requests/i)
     expect(res.headers.get('Retry-After')).toBe('3600')
   })
 
