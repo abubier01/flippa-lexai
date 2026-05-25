@@ -1,6 +1,7 @@
 import 'server-only'
 import type Stripe from 'stripe'
 import { getServiceClient } from '@/lib/supabase/service-role'
+import { log } from '@/lib/log'
 
 export async function handleSubscriptionDeleted(
   event: Stripe.CustomerSubscriptionDeletedEvent,
@@ -18,7 +19,7 @@ export async function handleSubscriptionDeleted(
     if (profileLookupError.code === 'PGRST116') {
       // Profile already deleted (e.g., GDPR deletion); nothing to downgrade.
       // Acknowledge to stop Stripe retries.
-      console.warn(`[subscription-deleted] no profile for customer ${customerId} (already deleted?)`)
+      log.warn('subscription-deleted: no profile for customer', { customerId, subsystem: 'stripe', event_type: 'customer.subscription.deleted' })
       return { userId: null }
     }
     throw new Error(`No profile found for customer ${customerId}: ${profileLookupError.message}`)
