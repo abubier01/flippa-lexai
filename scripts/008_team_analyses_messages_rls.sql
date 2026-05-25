@@ -32,10 +32,9 @@ CREATE POLICY "analyses_select_team" ON public.contract_analyses FOR SELECT USIN
   EXISTS (
     SELECT 1
       FROM public.contracts c
-      JOIN public.team_members tm ON tm.team_id = c.team_id
      WHERE c.id = contract_analyses.contract_id
        AND c.shared_with_team = TRUE
-       AND tm.user_id = auth.uid()
+       AND (SELECT public.is_team_member(c.team_id))
   )
 );
 
@@ -48,9 +47,8 @@ CREATE POLICY "messages_select_team" ON public.chat_messages FOR SELECT USING (
   EXISTS (
     SELECT 1
       FROM public.contracts c
-      JOIN public.team_members tm ON tm.team_id = c.team_id
      WHERE c.id = chat_messages.contract_id
        AND c.shared_with_team = TRUE
-       AND tm.user_id = auth.uid()
+       AND (SELECT public.is_team_member(c.team_id))
   )
 );
