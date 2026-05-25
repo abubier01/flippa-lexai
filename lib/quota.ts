@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { log } from '@/lib/log'
 
 export async function withQuotaClaim<T>(
   supabase: SupabaseClient,
@@ -45,8 +46,8 @@ async function releaseQuota(supabase: SupabaseClient): Promise<void> {
   const result = await supabase.rpc('release_monthly_contract') as
     | { error?: { message?: string } | null }
     | undefined
-  const message = result?.error?.message
-  if (message) {
-    console.error('[quota] release failed:', message)
+  const err = result?.error
+  if (err?.message) {
+    log.error('quota release failed', { err, subsystem: 'quota', op: 'release' })
   }
 }
