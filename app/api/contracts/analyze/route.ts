@@ -124,6 +124,9 @@ Respond with ONLY a valid JSON object matching this exact schema (no prose, no m
       ulog.error('analyze.schema.invalid', {
         contractId,
         issues: result.error.flatten(),
+        subsystem: 'llm',
+        provider: 'groq',
+        op: 'analyze',
       })
       throw new Error('AI returned data in an unexpected shape')
     }
@@ -158,7 +161,14 @@ Respond with ONLY a valid JSON object matching this exact schema (no prose, no m
 
     return NextResponse.json({ success: true })
   } catch (err) {
-    rlog.error('analyze.failed', { err, contractId, ...(userId ? { userId } : {}) })
+    rlog.error('analyze.failed', {
+      err,
+      contractId,
+      subsystem: 'llm',
+      provider: 'groq',
+      op: 'analyze',
+      ...(userId ? { userId } : {}),
+    })
     if (contractId) {
       try {
         const supabase = await createClient()
