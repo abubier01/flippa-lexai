@@ -71,6 +71,9 @@ export async function GET() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    log.error('tickets list failed', { err: error, subsystem: 'supabase', op: 'tickets.list' })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ tickets })
 }
