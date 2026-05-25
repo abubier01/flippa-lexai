@@ -1,4 +1,5 @@
 import 'server-only'
+import { createHash } from 'crypto'
 import type { PlanType } from '@/lib/plan-limits'
 import { getPolicy, POLICIES, type RateLimitAction, type Policy } from './rate-limit-policies'
 
@@ -35,7 +36,7 @@ export type RateLimitResult = {
   remaining: number
   resetAt: number
   retryAfterSeconds: number
-  degraded?: boolean // set to true on Upstash fail-open path (added in Task 4)
+  degraded?: boolean // set to true on Upstash fail-open path
 }
 
 function resolvePolicy(action: RateLimitAction, tier: PlanType): Policy {
@@ -48,6 +49,12 @@ function resolvePolicy(action: RateLimitAction, tier: PlanType): Policy {
 function buildKey(action: RateLimitAction, userId: string): string {
   return `ai:${action}:${userId}`
 }
+
+function shortUserHash(userId: string): string {
+  return createHash('sha256').update(userId).digest('hex').slice(0, 8)
+}
+
+// ─── In-memory path ──────────────────────────────────────────────────────────
 
 function consumeInMemory(
   action: RateLimitAction,
@@ -92,6 +99,98 @@ function consumeInMemory(
   }
 }
 
+// ─── Upstash path ────────────────────────────────────────────────────────────
+
+type LimiterCacheKey = `${RateLimitAction}:${PlanType}`
+
+type UpstashLimitResult = {
+  success: boolean
+  limit: number
+  remaining: number
+  reset: number
+}
+
+type LimiterInstance = {
+  limit: (key: string) => Promise<UpstashLimitResult>
+}
+
+const limiterCache = new Map<LimiterCacheKey, LimiterInstance>()
+
+let cachedRedis: unknown = null
+
+async function getLimiter(action: RateLimitAction, tier: PlanType, policy: Policy): Promise<LimiterInstance> {
+  const cacheKey: LimiterCacheKey = `${action}:${tier}`
+  const cached = limiterCache.get(cacheKey)
+  if (cached) return cached
+
+  const { Redis } = await import('@upstash/redis')
+  const { Ratelimit } = await import('@upstash/ratelimit')
+
+  if (!cachedRedis) {
+    cachedRedis = new Redis({
+      url: process.env.KV_REST_API_URL!,
+      token: process.env.KV_REST_API_TOKEN!,
+    })
+  }
+
+  // @upstash/ratelimit's slidingWindow accepts a Duration string. Convert from
+  // our numeric windowMs to the SDK's `${ms} ms` literal at this boundary so
+  // callers don't have to know the SDK's format.
+  const limiter = new Ratelimit({
+    redis: cachedRedis as ConstructorParameters<typeof Ratelimit>[0]['redis'],
+    limiter: Ratelimit.slidingWindow(policy.limit, `${policy.windowMs} ms` as `${number} ms`),
+    prefix: `ratelimit:${action}:${tier}`,
+    analytics: false,
+  }) as LimiterInstance
+
+  limiterCache.set(cacheKey, limiter)
+  return limiter
+}
+
+async function consumeUpstash(
+  action: RateLimitAction,
+  userId: string,
+  tier: PlanType,
+  policy: Policy,
+  now: number,
+): Promise<RateLimitResult> {
+  try {
+    const limiter = await getLimiter(action, tier, policy)
+    const result = await limiter.limit(buildKey(action, userId))
+    return {
+      allowed: result.success,
+      limit: result.limit,
+      remaining: result.remaining,
+      resetAt: result.reset,
+      retryAfterSeconds: result.success
+        ? 0
+        : Math.max(1, Math.ceil((result.reset - now) / 1000)),
+    }
+  } catch (err) {
+    const e = err as Error
+    console.error('rate_limit_backend_failure', {
+      event: 'rate_limit_backend_failure',
+      severity: 'warning',
+      category: 'rate_limiter',
+      err: e.message,
+      err_name: e.name,
+      action,
+      tier,
+      user_id_hash: shortUserHash(userId),
+    })
+    return {
+      allowed: true,
+      limit: policy.limit,
+      remaining: policy.limit,
+      resetAt: now + policy.windowMs,
+      retryAfterSeconds: 0,
+      degraded: true,
+    }
+  }
+}
+
+// ─── Public entry point ──────────────────────────────────────────────────────
+
 export async function consumeRateLimit(input: RateLimitInput): Promise<RateLimitResult> {
   const { action, userId, tier } = input
   if (!userId) {
@@ -100,7 +199,15 @@ export async function consumeRateLimit(input: RateLimitInput): Promise<RateLimit
   const policy = resolvePolicy(action, tier)
   const now = Date.now()
 
-  // Upstash branch will be added in Task 4. In-memory only for now.
+  const useUpstash =
+    typeof process.env.KV_REST_API_URL === 'string' &&
+    process.env.KV_REST_API_URL.length > 0 &&
+    typeof process.env.KV_REST_API_TOKEN === 'string' &&
+    process.env.KV_REST_API_TOKEN.length > 0
+
+  if (useUpstash) {
+    return consumeUpstash(action, userId, tier, policy, now)
+  }
   return consumeInMemory(action, userId, policy, now)
 }
 

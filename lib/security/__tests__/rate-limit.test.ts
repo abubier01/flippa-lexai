@@ -108,6 +108,126 @@ describe('consumeRateLimit (in-memory path)', () => {
   })
 })
 
+describe('consumeRateLimit (Upstash path)', () => {
+  beforeEach(() => {
+    process.env.KV_REST_API_URL = 'https://stub.upstash.io'
+    process.env.KV_REST_API_TOKEN = 'stub_token'
+    delete (globalThis as Record<string, unknown>).__lexaiRateLimitStore
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    delete process.env.KV_REST_API_URL
+    delete process.env.KV_REST_API_TOKEN
+    vi.restoreAllMocks()
+  })
+
+  it('routes through @upstash/ratelimit when env vars are present', async () => {
+    const limitMock = vi.fn().mockResolvedValue({
+      success: true,
+      limit: 60,
+      remaining: 59,
+      reset: Date.now() + 15 * 60 * 1000,
+    })
+
+    vi.doMock('@upstash/ratelimit', () => ({
+      Ratelimit: Object.assign(
+        vi.fn().mockImplementation(function () { return { limit: limitMock } }),
+        { slidingWindow: vi.fn().mockReturnValue({}) },
+      ),
+    }))
+    vi.doMock('@upstash/redis', () => ({
+      Redis: vi.fn().mockImplementation(function () { return {} }),
+    }))
+
+    const { consumeRateLimit } = await import('../rate-limit')
+    const result = await consumeRateLimit({
+      action: 'chat',
+      userId: 'u_upstash',
+      tier: 'free',
+    })
+
+    expect(result.allowed).toBe(true)
+    expect(result.remaining).toBe(59)
+    expect(limitMock).toHaveBeenCalledWith('ai:chat:u_upstash')
+  })
+
+  it('returns 429-equivalent result when Upstash reports limit exceeded', async () => {
+    const reset = Date.now() + 60_000
+    vi.doMock('@upstash/ratelimit', () => ({
+      Ratelimit: Object.assign(
+        vi.fn().mockImplementation(function () {
+          return {
+            limit: vi.fn().mockResolvedValue({
+              success: false,
+              limit: 60,
+              remaining: 0,
+              reset,
+            }),
+          }
+        }),
+        { slidingWindow: vi.fn().mockReturnValue({}) },
+      ),
+    }))
+    vi.doMock('@upstash/redis', () => ({
+      Redis: vi.fn().mockImplementation(function () { return {} }),
+    }))
+
+    const { consumeRateLimit } = await import('../rate-limit')
+    const result = await consumeRateLimit({
+      action: 'chat',
+      userId: 'u_blocked',
+      tier: 'free',
+    })
+
+    expect(result.allowed).toBe(false)
+    expect(result.remaining).toBe(0)
+    expect(result.retryAfterSeconds).toBeGreaterThan(0)
+  })
+
+  it('fails open with degraded=true when Upstash throws', async () => {
+    vi.doMock('@upstash/ratelimit', () => ({
+      Ratelimit: Object.assign(
+        vi.fn().mockImplementation(function () {
+          return { limit: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')) }
+        }),
+        { slidingWindow: vi.fn().mockReturnValue({}) },
+      ),
+    }))
+    vi.doMock('@upstash/redis', () => ({
+      Redis: vi.fn().mockImplementation(function () { return {} }),
+    }))
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { consumeRateLimit } = await import('../rate-limit')
+
+    const result = await consumeRateLimit({
+      action: 'chat',
+      userId: 'u_failopen',
+      tier: 'pro',
+    })
+
+    expect(result.allowed).toBe(true)
+    expect(result.degraded).toBe(true)
+    expect(result.limit).toBe(120)        // pro tier
+    expect(result.remaining).toBe(120)    // synthetic fresh budget
+    expect(errorSpy).toHaveBeenCalled()
+    const call = errorSpy.mock.calls[0]
+    expect(call[0]).toBe('rate_limit_backend_failure')
+    const payload = call[1] as Record<string, unknown>
+    expect(payload).toMatchObject({
+      event: 'rate_limit_backend_failure',
+      severity: 'warning',
+      category: 'rate_limiter',
+      action: 'chat',
+      tier: 'pro',
+    })
+    expect(payload.user_id_hash).toBeDefined()
+    expect(payload.user_id_hash).not.toBe('u_failopen')
+    errorSpy.mockRestore()
+  })
+})
+
 describe('rateLimitHeaders', () => {
   it('produces the documented HTTP header set', () => {
     const headers = rateLimitHeaders({
