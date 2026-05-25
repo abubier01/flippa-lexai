@@ -1,101 +1,114 @@
 import 'server-only'
-import type { NextRequest } from 'next/server'
+import type { PlanType } from '@/lib/plan-limits'
+import { getPolicy, POLICIES, type RateLimitAction, type Policy } from './rate-limit-policies'
 
-type Bucket = {
-  count: number
-  resetAt: number
+type Bucket = { count: number; resetAt: number }
+type Store = Map<string, Bucket>
+
+const STORE_KEY = '__lexaiRateLimitStore'
+const MAX_BUCKETS = 10_000
+
+function getStore(): Store {
+  const g = globalThis as Record<string, unknown>
+  if (!g[STORE_KEY]) {
+    g[STORE_KEY] = new Map<string, Bucket>()
+  }
+  return g[STORE_KEY] as Store
 }
 
-type RateLimitInput = {
-  key: string
-  limit: number
-  windowMs: number
-  now?: number
+function pruneIfNeeded(store: Store, now: number) {
+  if (store.size <= MAX_BUCKETS) return
+  for (const [k, b] of store.entries()) {
+    if (b.resetAt <= now) store.delete(k)
+  }
 }
 
-type RateLimitResult = {
+export type RateLimitInput = {
+  action: RateLimitAction
+  userId: string
+  tier: PlanType
+}
+
+export type RateLimitResult = {
   allowed: boolean
   limit: number
   remaining: number
   resetAt: number
   retryAfterSeconds: number
+  degraded?: boolean
 }
 
-const MAX_BUCKETS = 10_000
-
-declare global {
-  var __lexaiRateLimitStore: Map<string, Bucket> | undefined
+function resolvePolicy(action: RateLimitAction, tier: PlanType): Policy {
+  const candidate = POLICIES[action]?.[tier]
+  if (candidate) return candidate
+  console.warn('rate_limit_unknown_tier', { action, tier })
+  return getPolicy(action, 'free')
 }
 
-function getStore(): Map<string, Bucket> {
-  if (!globalThis.__lexaiRateLimitStore) {
-    globalThis.__lexaiRateLimitStore = new Map<string, Bucket>()
-  }
-  return globalThis.__lexaiRateLimitStore
+function buildKey(action: RateLimitAction, userId: string): string {
+  return `ai:${action}:${userId}`
 }
 
-function pruneStore(store: Map<string, Bucket>, now: number) {
-  if (store.size <= MAX_BUCKETS) return
-  for (const [key, bucket] of store.entries()) {
-    if (bucket.resetAt <= now) {
-      store.delete(key)
-    }
-  }
-}
-
-export function getClientIp(request: NextRequest): string {
-  const forwardedFor = request.headers.get('x-forwarded-for')
-  if (forwardedFor) {
-    const first = forwardedFor.split(',')[0]?.trim()
-    if (first) return first
-  }
-  return request.headers.get('x-real-ip')?.trim() || 'unknown'
-}
-
-export function consumeRateLimit(input: RateLimitInput): RateLimitResult {
-  const now = input.now ?? Date.now()
+function consumeInMemory(
+  action: RateLimitAction,
+  userId: string,
+  policy: Policy,
+  now: number,
+): RateLimitResult {
   const store = getStore()
-  pruneStore(store, now)
+  pruneIfNeeded(store, now)
+  const key = buildKey(action, userId)
+  const bucket = store.get(key)
 
-  const existing = store.get(input.key)
-  if (!existing || existing.resetAt <= now) {
-    const resetAt = now + input.windowMs
-    store.set(input.key, { count: 1, resetAt })
+  if (!bucket || bucket.resetAt <= now) {
+    const resetAt = now + policy.windowMs
+    store.set(key, { count: 1, resetAt })
     return {
       allowed: true,
-      limit: input.limit,
-      remaining: Math.max(0, input.limit - 1),
+      limit: policy.limit,
+      remaining: policy.limit - 1,
       resetAt,
       retryAfterSeconds: 0,
     }
   }
 
-  if (existing.count >= input.limit) {
+  if (bucket.count >= policy.limit) {
     return {
       allowed: false,
-      limit: input.limit,
+      limit: policy.limit,
       remaining: 0,
-      resetAt: existing.resetAt,
-      retryAfterSeconds: Math.max(1, Math.ceil((existing.resetAt - now) / 1000)),
+      resetAt: bucket.resetAt,
+      retryAfterSeconds: Math.max(0, Math.ceil((bucket.resetAt - now) / 1000)),
     }
   }
 
-  existing.count += 1
-  store.set(input.key, existing)
+  bucket.count += 1
   return {
     allowed: true,
-    limit: input.limit,
-    remaining: Math.max(0, input.limit - existing.count),
-    resetAt: existing.resetAt,
+    limit: policy.limit,
+    remaining: policy.limit - bucket.count,
+    resetAt: bucket.resetAt,
     retryAfterSeconds: 0,
   }
 }
 
+export async function consumeRateLimit(input: RateLimitInput): Promise<RateLimitResult> {
+  const { action, userId, tier } = input
+  if (!userId) {
+    throw new Error('consumeRateLimit: userId is required')
+  }
+  const policy = resolvePolicy(action, tier)
+  const now = Date.now()
+
+  // Upstash branch will be added in Task 4. In-memory only for now.
+  return consumeInMemory(action, userId, policy, now)
+}
+
 export function rateLimitHeaders(result: RateLimitResult): HeadersInit {
   return {
-    'X-RateLimit-Limit': String(result.limit),
-    'X-RateLimit-Remaining': String(result.remaining),
-    'X-RateLimit-Reset': String(Math.floor(result.resetAt / 1000)),
-    ...(result.allowed ? {} : { 'Retry-After': String(result.retryAfterSeconds) }),
+    'x-ratelimit-limit': String(result.limit),
+    'x-ratelimit-remaining': String(result.remaining),
+    'x-ratelimit-reset': String(Math.floor(result.resetAt / 1000)),
+    'retry-after': String(result.retryAfterSeconds),
   }
 }
