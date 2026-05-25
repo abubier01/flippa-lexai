@@ -22,6 +22,7 @@ export default function UploadForm() {
   const [loading, setLoading] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [retryAfter, setRetryAfter] = useState<{ seconds: number; limit: string | null } | null>(null)
+  const [quotaReached, setQuotaReached] = useState(false)
   const [activeTab, setActiveTab] = useState('file')
   const countdown = useRateLimitCountdown(
     retryAfter?.seconds ?? 0,
@@ -80,6 +81,11 @@ export default function UploadForm() {
       const data = await res.json()
 
       if (!res.ok) {
+        if (data.limitReached) {
+          setQuotaReached(true)
+          setLoading(false)
+          return
+        }
         throw new Error(data.error || 'Upload failed')
       }
 
@@ -106,6 +112,32 @@ export default function UploadForm() {
     } finally {
       setAnalyzing(false)
     }
+  }
+
+  if (quotaReached) {
+    return (
+      <div className="bg-card rounded-xl border border-border p-8 text-center">
+        <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+          <Zap className="w-7 h-7 text-destructive" />
+        </div>
+        <h3 className="text-lg font-semibold text-foreground mb-2">Monthly Limit Reached</h3>
+        <p className="text-muted-foreground text-sm mb-6 max-w-md mx-auto">
+          You&apos;ve used all 5 contract analyses for this month on the Free plan.
+          Upgrade to Pro for unlimited analyses and AI chat.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Button asChild>
+            <Link href="/settings">
+              <Zap className="w-4 h-4 mr-1.5" />
+              Upgrade to Pro
+            </Link>
+          </Button>
+          <Button variant="outline" onClick={() => setQuotaReached(false)}>
+            Go Back
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -223,7 +255,7 @@ export default function UploadForm() {
         </Alert>
       )}
 
-      <Button type="submit" size="lg" className="w-full h-12" disabled={countdown.isActive || loading || analyzing}>
+      <Button type="submit" size="lg" className="w-full h-12" disabled={countdown.isActive || quotaReached || loading || analyzing}>
         {loading ? (
           <>
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />

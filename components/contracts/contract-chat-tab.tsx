@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Bot, User } from 'lucide-react'
+import Link from 'next/link'
+import { Send, Loader2, Bot, User, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -27,6 +28,7 @@ export default function ContractChatTab({ contractId, initialMessages, readOnly 
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [retryAfter, setRetryAfter] = useState<{ seconds: number; limit: string | null } | null>(null)
+  const [quotaReached, setQuotaReached] = useState(false)
   const countdown = useRateLimitCountdown(
     retryAfter?.seconds ?? 0,
     () => setRetryAfter(null),
@@ -72,7 +74,13 @@ export default function ContractChatTab({ contractId, initialMessages, readOnly 
         return
       }
       if (!res.ok) {
-        const data = await res.json().catch(() => ({} as { error?: string }))
+        const data = await res.json().catch(() => ({} as { error?: string; limitReached?: boolean }))
+        if (data.limitReached) {
+          setQuotaReached(true)
+          setMessages((prev) => prev.slice(0, -1))
+          setLoading(false)
+          return
+        }
         throw new Error(data.error || 'Failed to get response')
       }
 
@@ -201,38 +209,54 @@ export default function ContractChatTab({ contractId, initialMessages, readOnly 
 
       {/* Input */}
       <div className="border-t border-border p-4">
-        {countdown.isActive && (
-          <Alert variant="destructive" className="mb-3">
-            <AlertTitle>You&apos;ve reached the chat limit</AlertTitle>
-            <AlertDescription>
-              {retryAfter?.limit
-                ? `Limit: ${retryAfter.limit} messages per 15 minutes. `
-                : ''}
-              Try again in {countdown.label}.
-            </AlertDescription>
-          </Alert>
+        {quotaReached ? (
+          <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <div className="flex items-center gap-3">
+              <Zap className="w-4 h-4 text-destructive shrink-0" />
+              <p className="text-sm text-foreground">
+                You&apos;ve reached the 20 message limit for this contract.
+              </p>
+            </div>
+            <Button asChild size="sm">
+              <Link href="/settings">Upgrade to Pro</Link>
+            </Button>
+          </div>
+        ) : (
+          <>
+            {countdown.isActive && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertTitle>You&apos;ve reached the chat limit</AlertTitle>
+                <AlertDescription>
+                  {retryAfter?.limit
+                    ? `Limit: ${retryAfter.limit} messages per 15 minutes. `
+                    : ''}
+                  Try again in {countdown.label}.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="flex items-end gap-3">
+              <Textarea
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
+                placeholder={readOnly ? 'Chat is read-only for shared contracts' : 'Ask about this contract…'}
+                rows={1}
+                className="resize-none flex-1 min-h-0 max-h-32 py-2.5"
+                disabled={countdown.isActive || quotaReached || readOnly || loading}
+              />
+              <Button
+                size="icon"
+                className="h-10 w-10 shrink-0"
+                onClick={() => sendMessage()}
+                disabled={countdown.isActive || quotaReached || readOnly || loading || !input.trim()}
+                aria-label="Send message"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">Press Enter to send, Shift+Enter for new line</p>
+          </>
         )}
-        <div className="flex items-end gap-3">
-          <Textarea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-            placeholder={readOnly ? 'Chat is read-only for shared contracts' : 'Ask about this contract…'}
-            rows={1}
-            className="resize-none flex-1 min-h-0 max-h-32 py-2.5"
-            disabled={countdown.isActive || readOnly || loading}
-          />
-          <Button
-            size="icon"
-            className="h-10 w-10 shrink-0"
-            onClick={() => sendMessage()}
-            disabled={countdown.isActive || readOnly || loading || !input.trim()}
-            aria-label="Send message"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">Press Enter to send, Shift+Enter for new line</p>
       </div>
     </div>
   )
