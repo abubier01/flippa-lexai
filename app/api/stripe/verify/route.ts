@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripe } from '@/lib/stripe'
 import type { PlanType } from '@/lib/plan-limits'
+import { log } from '@/lib/log'
 
 const TIER_ORDER: Record<PlanType, number> = { free: 0, pro: 1, team: 2 }
 
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, plan })
   } catch (err) {
-    console.error('[stripe-verify]', err)
+    log.error('stripe verify failed', { err, subsystem: 'stripe', op: 'verify' })
     return NextResponse.json({ error: 'Failed to verify payment' }, { status: 500 })
   }
 }
