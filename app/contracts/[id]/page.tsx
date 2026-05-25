@@ -21,11 +21,16 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   //     messages_select_team: owners read by auth.uid() = user_id; team
   //     viewers read rows whose parent contract is shared_with_team = TRUE
   //     and whose team they belong to (added in scripts/008_team_analyses_messages_rls.sql).
-  const [profileRes, contractRes, access, analysisRes, messagesRes] = await Promise.all([
+  const [profileRes, contractRes, access, analysesRes, messagesRes] = await Promise.all([
     supabase.from('profiles').select('plan, team_id').eq('id', user.id).single(),
     supabase.from('contracts').select('*').eq('id', id).single(),
     hasTeamAccess(user.id),
-    supabase.from('contract_analyses').select('*').eq('contract_id', id).maybeSingle(),
+    supabase
+      .from('contract_analyses')
+      .select('*')
+      .eq('contract_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1),
     // Drop empty assistant placeholders (orphaned from failed/aborted streams).
     // The chat route inserts an empty assistant row before streaming and UPDATEs
     // it in onFinish; if the stream never completes, the empty row stays. The
@@ -42,6 +47,13 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
 
   if (!contractRes.data) notFound()
   const contract = contractRes.data
+  if (analysesRes.error) {
+    console.error('[contracts/[id]] failed to load analysis', {
+      contractId: id,
+      message: analysesRes.error.message,
+    })
+  }
+  const analysis = analysesRes.data?.[0] ?? null
 
   const isOwner = contract.user_id === user.id
   const isTeamMember =
@@ -59,7 +71,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   return (
     <ContractAnalysisView
       contract={contract}
-      analysis={analysisRes.data}
+      analysis={analysis}
       initialMessages={messagesRes.data || []}
       userPlan={profileRes.data?.plan ?? 'solo'}
       // access.teamId can be non-null even when ok=false (lapsed team plan); guard is load-bearing.
