@@ -26,7 +26,18 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
     supabase.from('contracts').select('*').eq('id', id).single(),
     hasTeamAccess(user.id),
     supabase.from('contract_analyses').select('*').eq('contract_id', id).maybeSingle(),
-    supabase.from('chat_messages').select('*').eq('contract_id', id).order('created_at', { ascending: true }),
+    // Drop empty assistant placeholders (orphaned from failed/aborted streams).
+    // The chat route inserts an empty assistant row before streaming and UPDATEs
+    // it in onFinish; if the stream never completes, the empty row stays. The
+    // .or() means: keep row IF role='user' (user rows always have content) OR
+    // content!='' (filled assistant rows). Empty placeholders are dropped so
+    // the chat UI does not render blank bot bubbles on reload.
+    supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('contract_id', id)
+      .or('role.eq.user,content.neq.')
+      .order('created_at', { ascending: true }),
   ])
 
   if (!contractRes.data) notFound()

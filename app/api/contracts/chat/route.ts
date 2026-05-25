@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@/lib/supabase/server'
 import { createGroq } from '@ai-sdk/groq'
@@ -16,6 +16,11 @@ import {
   CHAT_RATE_LIMIT_WINDOW_MS,
   CHAT_REPLY_MAX_CHARS,
 } from '@/lib/constants/chat-limits'
+
+// Single source of truth for the user-facing persistence-failure message.
+// Surfaced from two distinct branches (insert error / placeholder missing); we
+// want both to read identically so the client never branches on copy.
+const SAVE_FAILED_MESSAGE = 'Failed to save message — please retry.'
 
 export async function POST(req: NextRequest) {
   let userId: string | undefined
@@ -61,15 +66,20 @@ export async function POST(req: NextRequest) {
         .from('contracts')
         .select('*')
         .eq('id', contractId)
-        .eq('user_id', user.id)
         .single(),
       getActivePlan(user.id),
+      // Count COMPLETED assistant turns (non-empty content) — not user rows.
+      // The pre-stream insert writes both a user row and an empty assistant
+      // placeholder; if streamText fails, the placeholder is never filled.
+      // Counting user rows would charge the quota for failed turns. Counting
+      // role='assistant' AND content<>'' charges only successful replies, which
+      // matches the user's mental model ("messages I got back").
       supabase
         .from('chat_messages')
         .select('*', { count: 'exact', head: true })
         .eq('contract_id', contractId)
-        .eq('user_id', user.id)
-        .eq('role', 'user'),
+        .eq('role', 'assistant')
+        .neq('content', ''),
       supabase
         .from('contract_analyses')
         .select('*')
@@ -89,6 +99,17 @@ export async function POST(req: NextRequest) {
     const contract = contractRes.data
 
     if (!contract) return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
+
+    const isOwner = contract.user_id === user.id
+    if (!isOwner) {
+      return NextResponse.json(
+        {
+          error: 'Chat is read-only for shared team contracts. Ask the contract owner to send messages.',
+          kind: 'chat_readonly',
+        },
+        { status: 403 }
+      )
+    }
 
     const plan = active.tier
     const limits = PLAN_LIMITS[plan]
@@ -158,6 +179,36 @@ ${historyMessages}
 User: ${safeMessage}
 Assistant:`
 
+    // Pre-stream: insert user row + empty assistant placeholder so a transient
+    // DB failure surfaces as 500 BEFORE any stream bytes go out (no silent loss).
+    // The placeholder is filled in via UPDATE in onFinish.
+    const { data: inserted, error: insertErr } = await supabase
+      .from('chat_messages')
+      .insert([
+        { contract_id: contractId, user_id: user.id, role: 'user', content: safeMessage },
+        { contract_id: contractId, user_id: user.id, role: 'assistant', content: '' },
+      ])
+      .select('id, role')
+
+    if (insertErr || !inserted) {
+      // Preserve the full Supabase error (code/details/hint) — the logger
+      // serializes Error instances, so a synthetic new Error(insertErr.message)
+      // would drop those fields. Pass the original PostgrestError as-is and
+      // surface .code at the top level so log-aggregation queries can filter.
+      rlog.error('chat.persist.pre_stream_failed', {
+        err: insertErr ?? new Error('no rows returned'),
+        code: insertErr?.code,
+        userId: user.id,
+      })
+      return NextResponse.json({ error: SAVE_FAILED_MESSAGE }, { status: 500 })
+    }
+
+    const placeholder = inserted.find(r => r.role === 'assistant')
+    if (!placeholder) {
+      rlog.error('chat.persist.placeholder_missing', { userId: user.id })
+      return NextResponse.json({ error: SAVE_FAILED_MESSAGE }, { status: 500 })
+    }
+
     const result = streamText({
       model: groq('llama-3.3-70b-versatile'),
       prompt,
@@ -166,13 +217,25 @@ Assistant:`
       onFinish: async ({ text }) => {
         const reply = text.trim().slice(0, CHAT_REPLY_MAX_CHARS)
         if (!reply) return
-        const { error } = await supabase.from('chat_messages').insert([
-          { contract_id: contractId, user_id: user.id, role: 'user', content: safeMessage },
-          { contract_id: contractId, user_id: user.id, role: 'assistant', content: reply },
-        ])
-        if (error) {
-          rlog.error('chat.persist.failed', { err: new Error(error.message), userId: user.id })
-        }
+        // Wrap in after() so the UPDATE runs to completion even if the client
+        // disconnects mid-stream. On Vercel serverless, without after() the
+        // function instance can be torn down before this async work finishes,
+        // leaving an orphaned empty assistant placeholder behind.
+        after(async () => {
+          const { error: updateErr } = await supabase
+            .from('chat_messages')
+            .update({ content: reply })
+            .eq('id', placeholder.id)
+          if (updateErr) {
+            // Same rationale as pre_stream_failed: preserve full PostgrestError.
+            rlog.error('chat.persist.update_failed', {
+              err: updateErr,
+              code: updateErr.code,
+              userId: user.id,
+              placeholderId: placeholder.id,
+            })
+          }
+        })
       },
     })
     return result.toTextStreamResponse()

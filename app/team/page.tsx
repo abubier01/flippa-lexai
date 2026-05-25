@@ -55,14 +55,15 @@ export default async function TeamPage() {
 
   if (effectiveTeamId) {
     const [teamRes, membersRes, invitesRes, contractsRes] = await Promise.all([
-      service.from('teams').select('*').eq('id', effectiveTeamId).single(),
+      service.from('teams').select('*').eq('id', effectiveTeamId).returns<Team[]>().single(),
       service.from('team_members').select('*').eq('team_id', effectiveTeamId),
-      service.from('team_invites').select('*').eq('team_id', effectiveTeamId).eq('status', 'pending'),
+      service.from('team_invites').select('*').eq('team_id', effectiveTeamId).eq('status', 'pending').returns<Invite[]>(),
       service.from('contracts')
         .select('*, contract_analyses(risks, summary)')
         .eq('team_id', effectiveTeamId)
         .eq('shared_with_team', true)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .returns<SharedContract[]>(),
     ])
 
     const rawMembers = (membersRes.data ?? []) as Array<{
@@ -80,13 +81,13 @@ export default async function TeamPage() {
 
     const profileMap = Object.fromEntries((profileRows ?? []).map(p => [p.id, p]))
 
-    team = teamRes.data as typeof team
+    team = teamRes.data ?? null
     members = rawMembers.map(m => ({
       ...m,
       profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'free' },
     }))
-    invites = (invitesRes.data ?? []) as Invite[]
-    sharedContracts = (contractsRes.data ?? []) as SharedContract[]
+    invites = invitesRes.data ?? []
+    sharedContracts = contractsRes.data ?? []
 
     // Compute team analytics
     const analyses = sharedContracts.flatMap(c => c.contract_analyses ?? [])
