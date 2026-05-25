@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getServiceClient } from '@/lib/supabase/service-role'
+import { log } from '@/lib/log'
 
 export async function DELETE(
   _req: NextRequest,
@@ -37,13 +38,29 @@ export async function DELETE(
     return NextResponse.json({ error: 'Owner cannot remove themselves.' }, { status: 400 })
   }
 
-  await service.from('team_members')
+  const { error: removeError } = await service.from('team_members')
     .delete()
     .eq('team_id', profile.team_id)
     .eq('user_id', memberId)
+  if (removeError) {
+    // Silent failure here would corrupt access state: owner thinks they removed
+    // the member but the member still belongs to the team. Surface unconditionally.
+    log.error('team member remove failed', {
+      err: removeError,
+      subsystem: 'supabase',
+      op: 'team.members.delete',
+    })
+  }
 
   // Clear team_id from removed member's profile
-  await service.from('profiles').update({ team_id: null }).eq('id', memberId)
+  const { error: clearProfileError } = await service.from('profiles').update({ team_id: null }).eq('id', memberId)
+  if (clearProfileError) {
+    log.error('team member profile clear failed', {
+      err: clearProfileError,
+      subsystem: 'supabase',
+      op: 'team.members.profile.clear',
+    })
+  }
 
   return NextResponse.json({ success: true })
 }
