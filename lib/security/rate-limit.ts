@@ -177,13 +177,13 @@ async function consumeUpstash(
     }
   } catch (err) {
     const e = err instanceof Error ? err : new Error(String(err))
-    console.error('rate_limit_backend_failure', {
+    log.error('rate_limit_backend_failure', {
+      err: e,
+      subsystem: 'rate-limit',
+      backend: 'upstash',
       event: 'rate_limit_backend_failure',
-      severity: 'warning',
       category: 'rate_limiter',
-      err: e.message,
-      err_name: e.name,
-      err_stack: e.stack,
+      severity: 'warning',
       action,
       tier,
       user_id_hash: shortUserHash(userId),
