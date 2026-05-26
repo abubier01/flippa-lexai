@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
+import { useTheme } from 'next-themes'
 import {
   LayoutDashboard,
   FileText,
@@ -16,6 +17,8 @@ import {
   Zap,
   Users,
   TicketIcon,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -23,6 +26,7 @@ import { toast } from 'sonner'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import { useMounted } from '@/hooks/use-mounted'
 
 const baseNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -42,6 +46,8 @@ export default function DashboardSidebar({ user, profile }: Props) {
   const pathname = usePathname()
   const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
+  const mounted = useMounted()
+  const { theme, setTheme } = useTheme()
 
   const navItems = [
     ...baseNavItems,
@@ -86,10 +92,10 @@ export default function DashboardSidebar({ user, profile }: Props) {
                 key={href}
                 href={href}
                 title={collapsed ? label : undefined}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all ${
                   active
-                    ? 'bg-sidebar-accent text-sidebar-primary'
-                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    ? 'text-foreground bg-primary/8 border-l-[3px] border-primary rounded-r-lg'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/40'
                 } ${collapsed ? 'justify-center' : ''}`}
               >
                 <Icon className="w-4.5 h-4.5 shrink-0" />
@@ -124,6 +130,18 @@ export default function DashboardSidebar({ user, profile }: Props) {
                 <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
                 <p className="text-xs text-muted-foreground truncate">{user.email}</p>
               </div>
+              {mounted ? (
+                <button
+                  type="button"
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  aria-label="Toggle theme"
+                >
+                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </button>
+              ) : (
+                <div className="w-8 h-8" />
+              )}
             </div>
           )}
           <button

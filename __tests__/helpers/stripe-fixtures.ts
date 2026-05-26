@@ -1,20 +1,15 @@
 import type Stripe from 'stripe'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> } : T
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function deepMerge<T>(base: T, override: DeepPartial<T> | undefined): T {
   if (!override) return base
   if (typeof base !== 'object' || base === null) return (override as T) ?? base
   if (Array.isArray(base)) return (override as T) ?? base
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result: any = { ...(base as any) }
   for (const key of Object.keys(override)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const o = (override as any)[key]
     if (o && typeof o === 'object' && !Array.isArray(o)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       result[key] = deepMerge((base as any)[key] ?? {}, o)
     } else if (o !== undefined) {
       result[key] = o

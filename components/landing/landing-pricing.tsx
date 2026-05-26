@@ -58,32 +58,32 @@ export default function LandingPricing() {
           {plans.map((plan) => (
             <div
               key={plan.name}
-              className={`relative rounded-2xl border p-7 flex flex-col ${
+              className={`relative rounded-2xl p-7 flex flex-col glass-card ${
                 plan.highlighted
-                  ? 'border-primary bg-primary text-primary-foreground shadow-xl shadow-primary/20'
-                  : 'border-border bg-card'
+                  ? 'border-primary shadow-xl shadow-primary/20'
+                  : 'border-border'
               }`}
             >
               {plan.highlighted && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                  <span className="bg-foreground text-background text-xs font-semibold px-3 py-1 rounded-full">
+                  <span className="bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full shadow-md shadow-primary/25">
                     Most popular
                   </span>
                 </div>
               )}
 
               <div className="mb-6">
-                <h3 className={`font-semibold text-lg mb-1 ${plan.highlighted ? 'text-primary-foreground' : 'text-foreground'}`}>
+                <h3 className={`font-semibold text-lg mb-1 ${plan.highlighted ? 'text-foreground' : 'text-foreground'}`}>
                   {plan.name}
                 </h3>
-                <p className={`text-sm mb-4 ${plan.highlighted ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                <p className={`text-sm mb-4 ${plan.highlighted ? 'text-foreground/80' : 'text-muted-foreground'}`}>
                   {plan.description}
                 </p>
                 <div className="flex items-end gap-1">
-                  <span className={`text-4xl font-bold ${plan.highlighted ? 'text-primary-foreground' : 'text-foreground'}`}>
+                  <span className={`text-4xl font-bold ${plan.highlighted ? 'text-foreground' : 'text-foreground'}`}>
                     {plan.price}
                   </span>
-                  <span className={`text-sm mb-1 ${plan.highlighted ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                  <span className={`text-sm mb-1 ${plan.highlighted ? 'text-foreground/70' : 'text-muted-foreground'}`}>
                     /{plan.period}
                   </span>
                 </div>
@@ -92,15 +92,15 @@ export default function LandingPricing() {
               <ul className="flex flex-col gap-3 mb-8 flex-1">
                 {plan.features.map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-sm">
-                    <Check className={`w-4 h-4 mt-0.5 shrink-0 ${plan.highlighted ? 'text-primary-foreground' : 'text-primary'}`} />
-                    <span className={plan.highlighted ? 'text-primary-foreground/90' : 'text-muted-foreground'}>{f}</span>
+                    <Check className={`w-4 h-4 mt-0.5 shrink-0 ${plan.highlighted ? 'text-primary' : 'text-primary'}`} />
+                    <span className={plan.highlighted ? 'text-foreground/90' : 'text-muted-foreground'}>{f}</span>
                   </li>
                 ))}
               </ul>
 
               <Button
-                variant={plan.highlighted ? 'secondary' : 'default'}
-                className="w-full"
+                variant={plan.highlighted ? 'default' : 'outline'}
+                className={`w-full ${plan.highlighted ? 'btn-glow primary border-0' : 'btn-glow secondary'}`}
                 asChild
               >
                 <Link href={plan.href}>{plan.cta}</Link>

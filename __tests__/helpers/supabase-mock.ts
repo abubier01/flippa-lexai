@@ -46,10 +46,8 @@ export function createSupabaseMock(opts: SetupOptions = {}) {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function makeChain(table: string, terminals: TerminalConfig | undefined, op: 'select' | 'mutation' = 'select'): any {
     const filters: Array<[string, unknown]> = []
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chain: any = {
       select: vi.fn().mockImplementation(() => chain),
       eq: vi.fn().mockImplementation((col: string, val: unknown) => { filters.push([col, val]); return chain }),
@@ -67,7 +65,6 @@ export function createSupabaseMock(opts: SetupOptions = {}) {
     return chain
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const client: any = {
     auth: {
       getUser: vi.fn().mockResolvedValue({

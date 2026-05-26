@@ -101,17 +101,18 @@ export default function ContractChatTab({ contractId, initialMessages, readOnly 
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-      let reply = ''
-
-      while (true) {
+      const readStream = async (accumulated: string): Promise<string> => {
         const { done, value } = await reader.read()
-        if (done) break
-        reply += decoder.decode(value, { stream: true })
+        if (done) {
+          return `${accumulated}${decoder.decode()}`
+        }
+        const nextReply = `${accumulated}${decoder.decode(value, { stream: true })}`
         setMessages(prev =>
-          prev.map(m => (m.id === assistantId ? { ...m, content: reply } : m)),
+          prev.map(m => (m.id === assistantId ? { ...m, content: nextReply } : m)),
         )
+        return readStream(nextReply)
       }
-      reply += decoder.decode()
+      const reply = await readStream('')
 
       if (!reply.trim()) {
         setMessages(prev => prev.filter(m => m.id !== assistantId))

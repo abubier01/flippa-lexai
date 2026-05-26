@@ -2,12 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
-import { Menu, X, Scale } from 'lucide-react'
+import { useMounted } from '@/hooks/use-mounted'
+import { Menu, X, Scale, Sun, Moon } from 'lucide-react'
 
 export default function LandingNav() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const mounted = useMounted()
+  const { theme, setTheme } = useTheme()
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 16)
@@ -17,8 +21,8 @@ export default function LandingNav() {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled ? 'bg-white/95 backdrop-blur-sm border-b border-border shadow-sm' : 'bg-transparent'
+      className={`fixed top-0 left-0 right-0 z-50 bg-background/40 backdrop-blur-md border-b border-border transition-all duration-300 ${
+        scrolled ? 'shadow-sm' : ''
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -42,6 +46,18 @@ export default function LandingNav() {
 
           {/* Desktop CTAs */}
           <div className="hidden md:flex items-center gap-3">
+            {mounted ? (
+              <button
+                type="button"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label="Toggle theme"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+            ) : (
+              <div className="w-8 h-8" />
+            )}
             <Button variant="ghost" size="sm" asChild>
               <Link href="/auth/login">Sign in</Link>
             </Button>
@@ -66,8 +82,18 @@ export default function LandingNav() {
 
       {/* Mobile menu */}
       {open && (
-        <div className="md:hidden bg-white border-b border-border shadow-md">
+        <div className="md:hidden bg-background/70 backdrop-blur-md border-b border-border shadow-md">
           <div className="px-4 py-4 flex flex-col gap-4">
+            {mounted && (
+              <button
+                type="button"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="w-fit p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label="Toggle theme"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+            )}
             <Link href="#features" className="text-sm text-muted-foreground" onClick={() => setOpen(false)}>Features</Link>
             <Link href="#how-it-works" className="text-sm text-muted-foreground" onClick={() => setOpen(false)}>How it works</Link>
             <Link href="#pricing" className="text-sm text-muted-foreground" onClick={() => setOpen(false)}>Pricing</Link>

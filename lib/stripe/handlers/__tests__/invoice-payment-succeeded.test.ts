@@ -29,7 +29,6 @@ describe('handleInvoicePaymentSucceeded', () => {
     const res = await handleInvoicePaymentSucceeded(evt)
 
     expect(res).toEqual({ userId: 'user-4' })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const upd = supabaseMock.calls.updates.subscriptions?.[0] as any
     expect(upd).toMatchObject({ status: 'active' })
     expect(new Date(upd.current_period_end).getTime()).toBe(periodEndSec * 1000)
@@ -37,7 +36,6 @@ describe('handleInvoicePaymentSucceeded', () => {
 
   it('no subscription on invoice → { userId: null }, no writes', async () => {
     supabaseMock = createSupabaseMock({})
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const evt = buildInvoicePaymentSucceeded({ data: { object: { subscription: null as any } } })
     const res = await handleInvoicePaymentSucceeded(evt)
 
@@ -47,7 +45,6 @@ describe('handleInvoicePaymentSucceeded', () => {
 
   it('missing period_end → { userId: null }, no writes', async () => {
     supabaseMock = createSupabaseMock({})
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const evt = buildInvoicePaymentSucceeded({ data: { object: { period_end: null as any } } })
     const res = await handleInvoicePaymentSucceeded(evt)
 

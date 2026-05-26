@@ -23,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Google tag (gtag.js) */}
+        {/* eslint-disable-next-line @next/next/next-script-for-ga */}
         <script
           async
           src="https://www.googletagmanager.com/gtag/js?id=G-R4F3T7E37S"

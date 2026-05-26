@@ -3,9 +3,21 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { FileText, Upload } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import RiskBadge from '@/components/contracts/risk-badge'
 import ContractRowActions from '@/components/contracts/contract-row-actions'
 import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
+
+const getRiskScoreClass = (score: number) => {
+  if (score >= 61) return 'risk-score-high'
+  if (score >= 31) return 'risk-score-med'
+  return 'risk-score-low'
+}
+
+const getPipelineStatusClass = (status: string) => {
+  if (status === 'completed') return 'bg-emerald-500/12 text-emerald-500 border border-emerald-500/25'
+  if (status === 'processing') return 'bg-primary/12 text-primary border border-primary/30'
+  if (status === 'failed') return 'bg-destructive/12 text-destructive border border-destructive/25'
+  return 'bg-muted text-muted-foreground border border-border'
+}
 
 export default async function ContractsPage() {
   const supabase = await createClient()
@@ -51,7 +63,7 @@ export default async function ContractsPage() {
         </Button>
       </div>
 
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
+      <div className="glass-card rounded-xl overflow-hidden">
         {!contracts || contracts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
             <div className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center mb-4">
@@ -93,18 +105,15 @@ export default async function ContractsPage() {
                   </div>
 
                   <div className="sm:col-span-2">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      contract.status === 'completed' ? 'bg-green-100 text-green-700' :
-                      contract.status === 'processing' ? 'bg-blue-100 text-blue-700' :
-                      contract.status === 'failed' ? 'bg-red-100 text-red-700' :
-                      'bg-muted text-muted-foreground'
-                    }`}>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${getPipelineStatusClass(contract.status)}`}>
                       {contract.status}
                     </span>
                   </div>
 
                   <div className="sm:col-span-2">
-                    <RiskBadge score={effectiveScore(contract.id, contract.risk_score)} />
+                    <div className={`risk-score-pill ${getRiskScoreClass(effectiveScore(contract.id, contract.risk_score))}`}>
+                      {effectiveScore(contract.id, contract.risk_score)}
+                    </div>
                   </div>
 
                   <div className="sm:col-span-2 text-xs text-muted-foreground">
