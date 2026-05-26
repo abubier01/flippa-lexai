@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useRateLimitCountdown } from '@/hooks/use-rate-limit-countdown'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_BYTES_LABEL } from '@/lib/constants/upload-limits'
 
 export default function UploadForm() {
   const router = useRouter()
@@ -36,8 +37,8 @@ export default function UploadForm() {
       toast.error('Only PDF, DOCX, and TXT files are supported')
       return
     }
-    if (f.size > 10 * 1024 * 1024) {
-      toast.error('File size must be under 10 MB')
+    if (f.size > MAX_UPLOAD_BYTES) {
+      toast.error(`File size must be under ${MAX_UPLOAD_BYTES_LABEL}`)
       return
     }
     setFile(f)
@@ -101,8 +102,7 @@ export default function UploadForm() {
       })
 
       if (!analyzeRes.ok) {
-        // Navigate anyway — the detail page will show the failed state
-        console.error('[v0] Analyze failed:', await analyzeRes.text())
+        // Navigate anyway — the detail page will show the failed state.
       }
 
       router.push(`/contracts/${data.id}`)
@@ -183,7 +183,7 @@ export default function UploadForm() {
                 <p className="text-sm font-medium text-foreground mb-1">
                   Drop your file here or click to browse
                 </p>
-                <p className="text-xs text-muted-foreground">PDF, DOCX, TXT — up to 10 MB</p>
+                <p className="text-xs text-muted-foreground">PDF, DOCX, TXT — up to {MAX_UPLOAD_BYTES_LABEL}</p>
                 <input
                   ref={fileRef}
                   type="file"

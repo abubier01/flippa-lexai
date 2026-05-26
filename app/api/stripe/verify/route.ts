@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripe } from '@/lib/stripe'
-import type { PlanType } from '@/lib/plan-limits'
+import { comparePlans, type PlanType } from '@/lib/plan-limits'
 import { log } from '@/lib/log'
-
-const TIER_ORDER: Record<PlanType, number> = { free: 0, pro: 1, team: 2 }
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,8 +35,8 @@ export async function POST(req: NextRequest) {
       .select('plan')
       .eq('id', user.id)
       .single()
-    const currentTier = TIER_ORDER[(profile?.plan as PlanType) ?? 'free']
-    if (TIER_ORDER[plan] < currentTier) {
+    const currentPlan = (profile?.plan as PlanType) ?? 'free'
+    if (comparePlans(plan, currentPlan) < 0) {
       return NextResponse.json(
         { error: 'Cannot downgrade via checkout. Use the billing portal.' },
         { status: 409 },

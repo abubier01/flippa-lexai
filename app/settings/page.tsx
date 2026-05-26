@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { User, Lock, CreditCard, Loader2, Shield, Bell, Check, Zap } from 'lucide-react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
-import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
+import { PLAN_LIMITS, comparePlans, type PlanType } from '@/lib/plan-limits'
 import { PRODUCTS } from '@/lib/products'
 import { DeleteAccountDialog } from '@/components/settings/delete-account-dialog'
 
@@ -277,10 +277,7 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {PRODUCTS.map(product => {
               const isCurrentPlan = currentPlan === product.plan
-              const isDowngrade =
-                (currentPlan === 'team' && product.plan === 'pro') ||
-                (currentPlan === 'pro' && product.plan === 'pro') ||
-                (currentPlan === 'team' && product.plan === 'team')
+              const isDowngrade = comparePlans(product.plan as PlanType, currentPlan) < 0
               const price = (product.priceInCents / 100).toFixed(0)
               const features = product.plan === 'pro'
                 ? ['Unlimited analyses', 'Unlimited AI chat', 'Clause extraction', 'Export PDF']

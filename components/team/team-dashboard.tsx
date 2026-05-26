@@ -12,6 +12,7 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import RiskBadge from '@/components/contracts/risk-badge'
 import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
+import { MAX_TEAM_MEMBERS } from '@/lib/plan-limits'
 import type { Member, Invite, SharedContract, Analytics, Team } from './types'
 
 interface Props {
@@ -167,7 +168,7 @@ export default function TeamDashboard({
             <Shield className="w-3 h-3" />
             Team Plan
           </span>
-          <span className="text-xs text-muted-foreground">{members.length}/10 members</span>
+          <span className="text-xs text-muted-foreground">{members.length}/{MAX_TEAM_MEMBERS} members</span>
         </div>
       </div>
 
@@ -259,12 +260,12 @@ export default function TeamDashboard({
                   <UserPlus className="w-4 h-4 text-primary" />
                   Invite a member by email
                 </p>
-                <span className="text-xs text-muted-foreground">{10 - members.length} seat{10 - members.length !== 1 ? 's' : ''} remaining</span>
+                <span className="text-xs text-muted-foreground">{MAX_TEAM_MEMBERS - members.length} seat{MAX_TEAM_MEMBERS - members.length !== 1 ? 's' : ''} remaining</span>
               </div>
 
-              {members.length >= 10 ? (
+              {members.length >= MAX_TEAM_MEMBERS ? (
                 <p className="text-sm text-muted-foreground bg-muted rounded-lg px-4 py-3">
-                  Your team is full (10/10 members). Remove a member to invite someone new.
+                  Your team is full ({MAX_TEAM_MEMBERS}/{MAX_TEAM_MEMBERS} members). Remove a member to invite someone new.
                 </p>
               ) : (
                 <div className="flex gap-2">

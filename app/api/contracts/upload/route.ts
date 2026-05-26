@@ -6,8 +6,8 @@ import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
 import { ANALYZE_TRUNCATION_CHARS } from '@/lib/llm/limits'
 import { logger } from '@/lib/log/request'
 import { withQuotaClaim } from '@/lib/quota'
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_BYTES_LABEL } from '@/lib/constants/upload-limits'
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024   // 10 MB — matches client validation
 const MAX_TEXT_CHARS = 50_000              // ~50 KB raw text, ~12 pages of contract
 
 // Dynamic import for server-side document parsing
@@ -66,9 +66,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid text field' }, { status: 400 })
     }
 
-    if (file && file.size > MAX_FILE_BYTES) {
+    if (file && file.size > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
-        { error: 'File too large. Maximum size is 10 MB.' },
+        { error: `File too large. Maximum size is ${MAX_UPLOAD_BYTES_LABEL}.` },
         { status: 413 }
       )
     }

@@ -91,7 +91,7 @@ function shouldUseLegacyFallback(message?: string, code?: string): boolean {
     code === '42501' ||
     msg.includes('claim_monthly_contract') ||
     msg.includes('schema cache') ||
-    msg.includes('function') && msg.includes('not found') ||
+    (msg.includes('function') && msg.includes('not found')) ||
     msg.includes('permission denied')
   )
 }

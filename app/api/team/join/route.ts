@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { getActivePlan } from '@/lib/plan/access'
 import { log } from '@/lib/log'
+import { MAX_TEAM_MEMBERS } from '@/lib/plan-limits'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -48,8 +49,8 @@ export async function POST(req: NextRequest) {
     .from('team_members')
     .select('*', { count: 'exact', head: true })
     .eq('team_id', invite.team_id)
-  if ((count ?? 0) >= 10) {
-    return NextResponse.json({ error: 'Team is full (max 10 members).' }, { status: 403 })
+  if ((count ?? 0) >= MAX_TEAM_MEMBERS) {
+    return NextResponse.json({ error: `Team is full (max ${MAX_TEAM_MEMBERS} members).` }, { status: 403 })
   }
 
   const { error: joinError } = await service.from('team_members').upsert({

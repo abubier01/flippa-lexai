@@ -17,6 +17,7 @@ function serializeContext(ctx?: LogContext): LogContext | undefined {
 const REDACT_SUBSTRINGS = [
   'password', 'token', 'secret', 'apikey', 'api_key',
   'authorization', 'cookie', 'sessionid',
+  'client_secret', 'service_role', 'anon_key', 'webhook_secret',
 ]
 
 function shouldRedactKey(key: string): boolean {

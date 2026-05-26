@@ -68,3 +68,15 @@ export function isUnlimited(value: number): boolean {
 export function formatLimit(value: number): string {
   return value === -1 ? 'Unlimited' : String(value)
 }
+
+export const MAX_TEAM_MEMBERS = 10
+
+const TIER_ORDER: Record<PlanType, number> = { free: 0, pro: 1, team: 2 }
+
+export function comparePlans(a: PlanType, b: PlanType): number {
+  return TIER_ORDER[a] - TIER_ORDER[b]
+}
+
+export function isUpgrade(from: PlanType, to: PlanType): boolean {
+  return comparePlans(to, from) > 0
+}
