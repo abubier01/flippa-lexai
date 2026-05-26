@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Upload, FileText, AlertTriangle, CheckCircle, ArrowRight, TrendingUp, Zap } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import RiskBadge from '@/components/contracts/risk-badge'
 import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
 import { log } from '@/lib/log'
 
@@ -26,13 +25,26 @@ interface ContractScoreSummary {
   bucket_81_100: number
 }
 
+const getRiskScoreClass = (score: number) => {
+  if (score >= 61) return 'risk-score-high'
+  if (score >= 31) return 'risk-score-med'
+  return 'risk-score-low'
+}
+
+const getPipelineStatusClass = (status: string) => {
+  if (status === 'completed') return 'bg-emerald-500/12 text-emerald-500 border border-emerald-500/25'
+  if (status === 'processing') return 'bg-primary/12 text-primary border border-primary/30'
+  if (status === 'failed') return 'bg-destructive/12 text-destructive border border-destructive/25'
+  return 'bg-muted text-muted-foreground border border-border'
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // The scores RPC is still needed to populate the per-contract <RiskBadge>
-  // Map for the recent-contracts list below. The summary RPC supplies the
-  // stat values (scalars + buckets) so we don't recompute them in JS.
+  // The scores RPC is still needed to populate per-contract risk values in
+  // the recent-contracts list below. The summary RPC supplies the stat values
+  // (scalars + buckets) so we don't recompute them in JS.
   const [contractsRes, scoresRes, summaryRes, profileRes] = await Promise.all([
     supabase
       .from('contracts')
@@ -175,18 +187,27 @@ export default async function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="bg-card rounded-xl border border-border p-5">
+          <div key={label} className="glass-card rounded-xl p-5">
             <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center mb-3`}>
               <Icon className={`w-4.5 h-4.5 ${color}`} />
             </div>
             <p className="text-2xl font-bold text-foreground">{value}</p>
             <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+            <svg className="w-full h-8 mt-2" viewBox="0 0 100 30" preserveAspectRatio="none">
+              <path
+                d="M0,25 Q15,10 30,22 T60,5 T90,20 L100,20"
+                fill="none"
+                stroke="currentColor"
+                className="text-primary"
+                strokeWidth="2.5"
+              />
+            </svg>
           </div>
         ))}
       </div>
 
       {/* Recent contracts */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
+      <div className="glass-card rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="font-semibold text-foreground">Recent Contracts</h3>
           <Link href="/contracts" className="text-sm text-primary hover:underline flex items-center gap-1">
@@ -227,13 +248,10 @@ export default async function DashboardPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <RiskBadge score={effectiveScore(contract.id, contract.risk_score)} />
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                    contract.status === 'completed' ? 'bg-green-100 text-green-700' :
-                    contract.status === 'processing' ? 'bg-blue-100 text-blue-700' :
-                    contract.status === 'failed' ? 'bg-red-100 text-red-700' :
-                    'bg-muted text-muted-foreground'
-                  }`}>
+                  <div className={`risk-score-pill ${getRiskScoreClass(effectiveScore(contract.id, contract.risk_score))}`}>
+                    {effectiveScore(contract.id, contract.risk_score)}
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${getPipelineStatusClass(contract.status)}`}>
                     {contract.status}
                   </span>
                 </div>

@@ -24,12 +24,10 @@ import { createSupabaseMock } from '@/__tests__/helpers/supabase-mock'
 // ---------------------------------------------------------------------------
 // Capture chart props
 // ---------------------------------------------------------------------------
- 
 const capturedProps: any[] = []
 
 vi.mock('@/components/reports/reports-charts', () => ({
   __esModule: true,
-   
   default: (props: any) => {
     capturedProps.push(props)
     return null

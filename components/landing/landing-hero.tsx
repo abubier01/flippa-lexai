@@ -27,7 +27,7 @@ export default function LandingHero() {
 
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-foreground text-balance max-w-4xl">
             Understand every contract
-            <span className="text-primary"> in seconds</span>
+            <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent"> in seconds</span>
           </h1>
 
           <p className="mt-6 text-lg sm:text-xl text-muted-foreground max-w-2xl text-balance leading-relaxed">
@@ -35,13 +35,13 @@ export default function LandingHero() {
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row items-center gap-4">
-            <Button size="lg" className="h-12 px-8 text-base" asChild>
+            <Button size="lg" className="h-12 px-8 text-base btn-glow primary border-0" asChild>
               <Link href="/auth/sign-up">
                 Start for free
                 <ArrowRight className="ml-2 w-4 h-4" />
               </Link>
             </Button>
-            <Button size="lg" variant="outline" className="h-12 px-8 text-base" asChild>
+            <Button size="lg" variant="outline" className="h-12 px-8 text-base btn-glow secondary" asChild>
               <Link href="/demo">
                 <FileText className="mr-2 w-4 h-4" />
                 Try live demo
@@ -69,7 +69,7 @@ export default function LandingHero() {
 
           {/* Hero image / mock UI */}
           <div className="mt-16 w-full max-w-5xl">
-            <div className="rounded-2xl border border-border bg-card shadow-xl overflow-hidden">
+            <div className="glass-card rounded-2xl overflow-hidden">
               {/* Window chrome */}
               <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-secondary/50">
                 <div className="w-3 h-3 rounded-full bg-red-400" />

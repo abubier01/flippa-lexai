@@ -83,7 +83,6 @@ describe('hasTeamAccess', () => {
         subQueryCount++
         if (subQueryCount === 2) {
           // owner's lookup — return team plan
-           
           const chain: any = {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),

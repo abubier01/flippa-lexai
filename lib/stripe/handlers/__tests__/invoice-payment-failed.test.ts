@@ -29,7 +29,6 @@ describe('handleInvoicePaymentFailed', () => {
 
   it('returns { userId: null } when invoice has no subscription, no DB writes', async () => {
     supabaseMock = createSupabaseMock({})
-     
     const evt = buildInvoicePaymentFailed({ data: { object: { subscription: null as any } } })
     const res = await handleInvoicePaymentFailed(evt)
 

@@ -101,22 +101,20 @@ export default function ContractChatTab({ contractId, initialMessages, readOnly 
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-      let accumulated = ''
-
-      while (true) {
+      const readStream = async (accumulated: string): Promise<string> => {
         const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        accumulated += chunk
-        // Append via prev state so the setMessages closure doesn't capture the
-        // outer accumulator (react-hooks/immutability would flag that).
+        if (done) {
+          return `${accumulated}${decoder.decode()}`
+        }
+        const nextReply = `${accumulated}${decoder.decode(value, { stream: true })}`
         setMessages(prev =>
-          prev.map(m => (m.id === assistantId ? { ...m, content: m.content + chunk } : m)),
+          prev.map(m => (m.id === assistantId ? { ...m, content: nextReply } : m)),
         )
+        return readStream(nextReply)
       }
-      accumulated += decoder.decode()
+      const reply = await readStream('')
 
-      if (!accumulated.trim()) {
+      if (!reply.trim()) {
         setMessages(prev => prev.filter(m => m.id !== assistantId))
       }
     } catch (err) {

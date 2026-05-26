@@ -37,7 +37,7 @@ export default function LandingFeatures() {
   return (
     <section id="features" className="py-20 md:py-28 bg-secondary/30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
+        <div className="text-center mb-16 glass-card rounded-2xl px-6 py-8">
           <p className="text-primary font-medium text-sm tracking-wide uppercase mb-3">Features</p>
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground text-balance">
             Everything you need to review contracts
@@ -53,7 +53,7 @@ export default function LandingFeatures() {
             return (
               <div
                 key={feature.title}
-                className="bg-card rounded-xl border border-border p-6 hover:shadow-md hover:border-primary/30 transition-all duration-200"
+                className="glass-card rounded-xl p-6 hover:shadow-md hover:border-primary/30 transition-all duration-200"
               >
                 <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center mb-4">
                   <Icon className="w-5 h-5 text-primary" />

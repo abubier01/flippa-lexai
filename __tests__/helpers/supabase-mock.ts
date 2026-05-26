@@ -46,10 +46,8 @@ export function createSupabaseMock(opts: SetupOptions = {}) {
     }
   }
 
-   
   function makeChain(table: string, terminals: TerminalConfig | undefined, op: 'select' | 'mutation' = 'select'): any {
     const filters: Array<[string, unknown]> = []
-     
     const chain: any = {
       select: vi.fn().mockImplementation(() => chain),
       eq: vi.fn().mockImplementation((col: string, val: unknown) => { filters.push([col, val]); return chain }),
@@ -67,7 +65,6 @@ export function createSupabaseMock(opts: SetupOptions = {}) {
     return chain
   }
 
-   
   const client: any = {
     auth: {
       getUser: vi.fn().mockResolvedValue({

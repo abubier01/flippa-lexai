@@ -290,7 +290,6 @@ describe('E2E: checkout → webhook → plan update', () => {
                 object: 'subscription_item',
                 price: { id: TEST_PRO_PRICE_ID },
                 quantity: 1,
-                 
               } as any,
             ],
           },
