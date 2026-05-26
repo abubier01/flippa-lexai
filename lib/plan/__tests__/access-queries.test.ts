@@ -83,7 +83,7 @@ describe('hasTeamAccess', () => {
         subQueryCount++
         if (subQueryCount === 2) {
           // owner's lookup — return team plan
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           const chain: any = {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
