@@ -4,14 +4,17 @@ exports[`POLICIES > matches the documented starter values 1`] = `
 {
   "account-delete": {
     "free": {
+      "failMode": "closed",
       "limit": 5,
       "windowMs": 900000,
     },
     "pro": {
+      "failMode": "closed",
       "limit": 5,
       "windowMs": 900000,
     },
     "team": {
+      "failMode": "closed",
       "limit": 5,
       "windowMs": 900000,
     },
@@ -46,14 +49,17 @@ exports[`POLICIES > matches the documented starter values 1`] = `
   },
   "contract-delete": {
     "free": {
+      "failMode": "closed",
       "limit": 60,
       "windowMs": 900000,
     },
     "pro": {
+      "failMode": "closed",
       "limit": 60,
       "windowMs": 900000,
     },
     "team": {
+      "failMode": "closed",
       "limit": 60,
       "windowMs": 900000,
     },

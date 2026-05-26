@@ -233,6 +233,64 @@ describe('consumeRateLimit (Upstash path)', () => {
     expect(typeof err.stack).toBe('string')
     errorSpy.mockRestore()
   })
+
+  // P1-3: anti-abuse actions (account-delete, contract-delete) must fail CLOSED
+  // when Upstash is unavailable. The route should see allowed:false + degraded:true
+  // and respond 503 (not 429) so the client knows it's a transient backend issue.
+  it('fails closed (allowed=false, degraded=true) when policy.failMode="closed" and Upstash throws', async () => {
+    vi.doMock('@upstash/ratelimit', () => ({
+      Ratelimit: Object.assign(
+        vi.fn().mockImplementation(function () {
+          return { limit: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')) }
+        }),
+        { slidingWindow: vi.fn().mockReturnValue({}) },
+      ),
+    }))
+    vi.doMock('@upstash/redis', () => ({
+      Redis: vi.fn().mockImplementation(function () { return {} }),
+    }))
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { consumeRateLimit } = await import('../rate-limit')
+
+    const result = await consumeRateLimit({
+      action: 'account-delete',
+      userId: 'u_failclosed',
+      tier: 'free',
+    })
+
+    expect(result.allowed).toBe(false)
+    expect(result.degraded).toBe(true)
+    expect(result.retryAfterSeconds).toBeGreaterThan(0)
+    errorSpy.mockRestore()
+  })
+
+  it('also fails closed for contract-delete when Upstash throws', async () => {
+    vi.doMock('@upstash/ratelimit', () => ({
+      Ratelimit: Object.assign(
+        vi.fn().mockImplementation(function () {
+          return { limit: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')) }
+        }),
+        { slidingWindow: vi.fn().mockReturnValue({}) },
+      ),
+    }))
+    vi.doMock('@upstash/redis', () => ({
+      Redis: vi.fn().mockImplementation(function () { return {} }),
+    }))
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { consumeRateLimit } = await import('../rate-limit')
+
+    const result = await consumeRateLimit({
+      action: 'contract-delete',
+      userId: 'u_failclosed_contract',
+      tier: 'free',
+    })
+
+    expect(result.allowed).toBe(false)
+    expect(result.degraded).toBe(true)
+    errorSpy.mockRestore()
+  })
 })
 
 describe('rateLimitHeaders', () => {

@@ -44,7 +44,7 @@ describe('008_team_analyses_messages_rls.sql', () => {
     }
   })
 
-  it('references team_members, shared_with_team, and auth.uid() in both policies', () => {
+  it('references shared_with_team and the is_team_member helper in both policies', () => {
     const analysesBlock = sql.match(
       /CREATE POLICY\s+"analyses_select_team"[\s\S]*?;/i,
     )?.[0]
@@ -53,9 +53,8 @@ describe('008_team_analyses_messages_rls.sql', () => {
     )?.[0]
 
     for (const block of [analysesBlock!, messagesBlock!]) {
-      expect(block).toMatch(/team_members/)
       expect(block).toMatch(/shared_with_team\s*=\s*TRUE/i)
-      expect(block).toMatch(/auth\.uid\(\)/)
+      expect(block).toMatch(/is_team_member\s*\(/i)
     }
   })
 

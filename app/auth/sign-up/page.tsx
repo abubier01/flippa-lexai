@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { log } from '@/lib/log'
 import { Scale, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,15 +29,17 @@ export default function SignUpPage() {
     e.preventDefault()
     setLoading(true)
     const supabase = createClient()
+    const emailRedirectTo = process.env.NEXT_PUBLIC_SUPABASE_EMAIL_REDIRECT_URL?.trim()
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { full_name: fullName },
-        emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
+        ...(emailRedirectTo ? { emailRedirectTo } : {}),
       },
     })
     if (error) {
+      log.error('auth signup failed', { err: error, subsystem: 'supabase', op: 'auth.signup' })
       toast.error(error.message)
       setLoading(false)
       return

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from '@/components/ui/sonner'
+import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -17,8 +18,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const analyticsEnabled = process.env.NEXT_PUBLIC_ENABLE_VERCEL_ANALYTICS === 'true'
+
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Google tag (gtag.js) */}
         <script
@@ -36,10 +39,20 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="font-sans antialiased bg-background text-foreground">
-        {children}
-        <Toaster position="top-right" richColors />
-        <Analytics />
+      <body className="font-sans antialiased bg-background text-foreground relative min-h-screen">
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          {/* Atmospheric Background Graphics */}
+          <div className="bg-orbs">
+            <div className="orb orb-1" />
+            <div className="orb orb-2" />
+          </div>
+          
+          <div className="relative z-10">
+            {children}
+          </div>
+          <Toaster position="top-right" richColors />
+          {analyticsEnabled ? <Analytics /> : null}
+        </ThemeProvider>
       </body>
     </html>
   )

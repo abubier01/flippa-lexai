@@ -20,10 +20,29 @@ CREATE TABLE IF NOT EXISTS public.team_members (
 
 ALTER TABLE public.team_members ENABLE ROW LEVEL SECURITY;
 
+-- Membership helper used by team-scoped RLS policies.
+-- SECURITY DEFINER avoids recursive policy evaluation on team_members.
+CREATE OR REPLACE FUNCTION public.is_team_member(p_team_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+      FROM public.team_members tm
+     WHERE tm.team_id = p_team_id
+       AND tm.user_id = auth.uid()
+  );
+$$;
+REVOKE ALL ON FUNCTION public.is_team_member(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_team_member(UUID) TO authenticated;
+
 -- Teams RLS
 CREATE POLICY "teams_select_member" ON public.teams FOR SELECT USING (
-  auth.uid() = owner_id OR 
-  EXISTS (SELECT 1 FROM public.team_members WHERE team_id = teams.id AND user_id = auth.uid())
+  auth.uid() = owner_id OR
+  (SELECT public.is_team_member(teams.id))
 );
 CREATE POLICY "teams_insert_owner" ON public.teams FOR INSERT WITH CHECK (auth.uid() = owner_id);
 CREATE POLICY "teams_update_owner" ON public.teams FOR UPDATE USING (auth.uid() = owner_id);
@@ -32,7 +51,7 @@ CREATE POLICY "teams_delete_owner" ON public.teams FOR DELETE USING (auth.uid() 
 -- Team members RLS
 CREATE POLICY "team_members_select" ON public.team_members FOR SELECT USING (
   user_id = auth.uid() OR
-  EXISTS (SELECT 1 FROM public.team_members tm2 WHERE tm2.team_id = team_members.team_id AND tm2.user_id = auth.uid())
+  (SELECT public.is_team_member(team_members.team_id))
 );
 CREATE POLICY "team_members_insert_owner" ON public.team_members FOR INSERT WITH CHECK (
   EXISTS (SELECT 1 FROM public.teams WHERE id = team_id AND owner_id = auth.uid())
@@ -59,10 +78,10 @@ ALTER TABLE public.team_invites ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "invites_select_team_member" ON public.team_invites FOR SELECT USING (
   invited_by = auth.uid() OR
-  EXISTS (SELECT 1 FROM public.team_members WHERE team_id = team_invites.team_id AND user_id = auth.uid())
+  (SELECT public.is_team_member(team_invites.team_id))
 );
 CREATE POLICY "invites_insert_member" ON public.team_invites FOR INSERT WITH CHECK (
-  EXISTS (SELECT 1 FROM public.team_members WHERE team_id = team_invites.team_id AND user_id = auth.uid())
+  (SELECT public.is_team_member(team_invites.team_id))
 );
 CREATE POLICY "invites_update" ON public.team_invites FOR UPDATE USING (
   invited_by = auth.uid() OR
@@ -76,10 +95,7 @@ ALTER TABLE public.contracts ADD COLUMN IF NOT EXISTS shared_with_team BOOLEAN D
 -- Allow team members to read team-shared contracts
 CREATE POLICY "contracts_select_team" ON public.contracts FOR SELECT USING (
   shared_with_team = TRUE AND
-  EXISTS (
-    SELECT 1 FROM public.team_members
-    WHERE team_id = contracts.team_id AND user_id = auth.uid()
-  )
+  (SELECT public.is_team_member(contracts.team_id))
 );
 
 -- Allow team members to read analyses for team-shared contracts
@@ -87,10 +103,9 @@ CREATE POLICY "analyses_select_team" ON public.contract_analyses FOR SELECT USIN
   EXISTS (
     SELECT 1
     FROM public.contracts c
-    JOIN public.team_members tm ON tm.team_id = c.team_id
     WHERE c.id = contract_analyses.contract_id
       AND c.shared_with_team = TRUE
-      AND tm.user_id = auth.uid()
+      AND (SELECT public.is_team_member(c.team_id))
   )
 );
 
@@ -99,10 +114,9 @@ CREATE POLICY "messages_select_team" ON public.chat_messages FOR SELECT USING (
   EXISTS (
     SELECT 1
     FROM public.contracts c
-    JOIN public.team_members tm ON tm.team_id = c.team_id
     WHERE c.id = chat_messages.contract_id
       AND c.shared_with_team = TRUE
-      AND tm.user_id = auth.uid()
+      AND (SELECT public.is_team_member(c.team_id))
   )
 );
 

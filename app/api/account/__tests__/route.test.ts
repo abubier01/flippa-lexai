@@ -22,8 +22,9 @@ import { NextRequest } from 'next/server'
 // Hoisted mutable mock references
 // ---------------------------------------------------------------------------
 
-const { mockSupabase, mockAdminDeleteUser } = vi.hoisted(() => {
+const { mockSupabase, mockAdminDeleteUser, mockStripeCustomersDel } = vi.hoisted(() => {
   const mockAdminDeleteUser = vi.fn().mockResolvedValue({ error: null })
+  const mockStripeCustomersDel = vi.fn().mockResolvedValue({ id: 'cus_abc', deleted: true })
 
   const mockServiceClient = {
     auth: {
@@ -49,12 +50,15 @@ const { mockSupabase, mockAdminDeleteUser } = vi.hoisted(() => {
     from: vi.fn().mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { plan: 'free' } }),
+      single: vi.fn().mockResolvedValue({
+        data: { plan: 'free', stripe_customer_id: 'cus_abc' },
+        error: null,
+      }),
     }),
     _serviceClient: mockServiceClient,
   }
 
-  return { mockSupabase, mockAdminDeleteUser }
+  return { mockSupabase, mockAdminDeleteUser, mockStripeCustomersDel }
 })
 
 // ---------------------------------------------------------------------------
@@ -74,6 +78,12 @@ vi.mock('@/lib/supabase/service-role', () => ({
         deleteUser: mockAdminDeleteUser,
       },
     },
+  }),
+}))
+
+vi.mock('@/lib/stripe', () => ({
+  getStripe: vi.fn().mockReturnValue({
+    customers: { del: mockStripeCustomersDel },
   }),
 }))
 
@@ -130,6 +140,8 @@ function buildDeleteRequest(body: Record<string, unknown> = {}): NextRequest {
 function makeSupabase(overrides: {
   user?: null | { id: string; email?: string; app_metadata?: Record<string, string> }
   plan?: string
+  stripeCustomerId?: string | null
+  profileError?: { code?: string; message?: string } | null
 }) {
   const user =
     overrides.user === null
@@ -141,6 +153,11 @@ function makeSupabase(overrides: {
         }
 
   const plan = overrides.plan ?? 'free'
+  const stripeCustomerId = overrides.stripeCustomerId === undefined ? 'cus_abc' : overrides.stripeCustomerId
+  const profileError = overrides.profileError ?? null
+  const singleResult = profileError
+    ? { data: null, error: profileError }
+    : { data: { plan, stripe_customer_id: stripeCustomerId }, error: null }
 
   return {
     auth: {
@@ -150,7 +167,7 @@ function makeSupabase(overrides: {
     from: vi.fn().mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { plan } }),
+      single: vi.fn().mockResolvedValue(singleResult),
     }),
   }
 }
@@ -183,7 +200,9 @@ describe('DELETE /api/account', () => {
     })
     // Reset admin delete to success
     mockAdminDeleteUser.mockResolvedValue({ error: null })
-    // Reset supabase createClient to default (free plan, email provider)
+    // Reset Stripe customer delete to success
+    mockStripeCustomersDel.mockResolvedValue({ id: 'cus_abc', deleted: true })
+    // Reset supabase createClient to default (free plan, email provider, stripe_customer_id set)
     createClientMock.mockResolvedValue(makeSupabase({}))
   })
 
@@ -368,5 +387,98 @@ describe('DELETE /api/account', () => {
         body: expect.stringContaining('"email"'),
       }),
     )
+  })
+
+  // P1-1: profile-read race — if PostgREST returns an error (other than PGRST116
+  // "no row"), the paid-account guard must fail closed, not silently bypass.
+  it('returns 503 when profile read fails with a non-PGRST116 error', async () => {
+    createClientMock.mockResolvedValueOnce(
+      makeSupabase({ profileError: { code: 'PGRST301', message: 'connection refused' } }),
+    )
+
+    const res = await DELETE(buildDeleteRequest())
+    const body = await res.json()
+
+    expect(res.status).toBe(503)
+    expect(body.error).toMatch(/temporarily unavailable|try again/i)
+    expect(mockAdminDeleteUser).not.toHaveBeenCalled()
+    expect(mockStripeCustomersDel).not.toHaveBeenCalled()
+  })
+
+  it('still proceeds when profile read returns PGRST116 (no row — treated as no paid plan)', async () => {
+    createClientMock.mockResolvedValueOnce(
+      makeSupabase({ profileError: { code: 'PGRST116', message: 'no rows' } }),
+    )
+
+    const res = await DELETE(buildDeleteRequest())
+    expect(res.status).toBe(200)
+  })
+
+  // P1-3: when rate-limit is degraded + fail-closed, the route must return 503,
+  // not 429, so the client knows it's a backend availability problem (transient)
+  // rather than a real quota hit (steady-state).
+  it('returns 503 when rate-limit fails closed (degraded:true)', async () => {
+    consumeRateLimitMock.mockResolvedValueOnce({
+      allowed: false,
+      degraded: true,
+      limit: 5,
+      remaining: 0,
+      resetAt: Date.now() + 15 * 60 * 1000,
+      retryAfterSeconds: 900,
+    })
+
+    const res = await DELETE(buildDeleteRequest())
+    const body = await res.json()
+
+    expect(res.status).toBe(503)
+    expect(body.error).toMatch(/temporarily unavailable|try again/i)
+  })
+
+  // P1-2: account deletion must also delete the Stripe customer object so the
+  // billing record (email + PII) doesn't persist forever. GDPR right-to-erasure.
+  it('calls stripe.customers.del with profile.stripe_customer_id before admin.deleteUser', async () => {
+    await DELETE(buildDeleteRequest())
+
+    expect(mockStripeCustomersDel).toHaveBeenCalledWith('cus_abc')
+    // Ordering: Stripe del should run before admin.deleteUser so a failure
+    // doesn't leave a deleted auth user with an orphaned Stripe customer.
+    expect(mockStripeCustomersDel.mock.invocationCallOrder[0]).toBeLessThan(
+      mockAdminDeleteUser.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('skips stripe.customers.del when profile has no stripe_customer_id', async () => {
+    createClientMock.mockResolvedValueOnce(makeSupabase({ stripeCustomerId: null }))
+
+    const res = await DELETE(buildDeleteRequest())
+
+    expect(res.status).toBe(200)
+    expect(mockStripeCustomersDel).not.toHaveBeenCalled()
+    expect(mockAdminDeleteUser).toHaveBeenCalled()
+  })
+
+  it('swallows Stripe resource_missing and proceeds with auth deletion', async () => {
+    const resourceMissing = Object.assign(new Error('No such customer: cus_abc'), {
+      code: 'resource_missing',
+      type: 'StripeInvalidRequestError',
+    })
+    mockStripeCustomersDel.mockRejectedValueOnce(resourceMissing)
+
+    const res = await DELETE(buildDeleteRequest())
+
+    expect(res.status).toBe(200)
+    expect(mockAdminDeleteUser).toHaveBeenCalledWith('user-1')
+  })
+
+  it('returns 500 if Stripe del fails with a non-recoverable error', async () => {
+    mockStripeCustomersDel.mockRejectedValueOnce(new Error('Stripe API unavailable'))
+
+    const res = await DELETE(buildDeleteRequest())
+    const body = await res.json()
+
+    expect(res.status).toBe(500)
+    expect(body.error).toMatch(/billing|stripe|account/i)
+    // Auth user must NOT be deleted if Stripe del fails — would orphan billing.
+    expect(mockAdminDeleteUser).not.toHaveBeenCalled()
   })
 })

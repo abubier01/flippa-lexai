@@ -107,4 +107,22 @@ describe('useRateLimitCountdown', () => {
     expect(firstOnExpire).not.toHaveBeenCalled()
     expect(secondOnExpire).toHaveBeenCalledTimes(1)
   })
+
+  it('restarts countdown when retryAfterSeconds changes', () => {
+    const { result, rerender } = renderHook(
+      ({ seconds }: { seconds: number }) => useRateLimitCountdown(seconds),
+      { initialProps: { seconds: 3 } },
+    )
+
+    act(() => { vi.advanceTimersByTime(2000) })
+    expect(result.current.secondsRemaining).toBe(1)
+
+    // New 429 window arrives from a later request; timer must reset.
+    rerender({ seconds: 5 })
+    expect(result.current.secondsRemaining).toBe(5)
+    expect(result.current.isActive).toBe(true)
+
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(result.current.secondsRemaining).toBe(4)
+  })
 })

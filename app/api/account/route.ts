@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
 import { log } from '@/lib/log'
+import { getStripe } from '@/lib/stripe'
 
 export async function DELETE(req: NextRequest) {
   const supabase = await createClient()
@@ -22,19 +23,35 @@ export async function DELETE(req: NextRequest) {
     tier: 'free',
   })
   if (!rl.allowed) {
+    // degraded => Upstash backend failed AND policy.failMode='closed'. Surface as 503
+    // so the client knows it's a transient backend issue, not a real quota hit.
+    const status = rl.degraded ? 503 : 429
+    const message = rl.degraded
+      ? 'Service temporarily unavailable. Please try again.'
+      : 'Too many delete requests'
     return NextResponse.json(
-      { error: 'Too many delete requests', limitReached: true },
-      { status: 429, headers: rateLimitHeaders(rl) },
+      { error: message, limitReached: !rl.degraded },
+      { status, headers: rateLimitHeaders(rl) },
     )
   }
 
   // Check for active paid subscription BEFORE reading the request body.
   // This way the user doesn't need to type their password just to hit a 409.
-  const { data: profile } = await supabase
+  // Also load stripe_customer_id for the Stripe cleanup below.
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('plan')
+    .select('plan, stripe_customer_id')
     .eq('id', user.id)
     .single()
+  // PGRST116 ("Results contain 0 rows") means no profile row — fine; treat as
+  // no paid plan and proceed. Any other error indicates PostgREST is unhealthy;
+  // fail closed to avoid bypassing the paid-account guard.
+  if (profileError && profileError.code !== 'PGRST116') {
+    return NextResponse.json(
+      { error: 'Service temporarily unavailable. Please try again.' },
+      { status: 503 },
+    )
+  }
   if (profile?.plan && profile.plan !== 'free') {
     return NextResponse.json(
       {
@@ -91,6 +108,24 @@ export async function DELETE(req: NextRequest) {
   // Body is intentionally not assigned beyond this check — we don't want
   // the access_token or refresh_token persisted; they'd rotate the session
   // we're about to destroy.
+
+  // Delete the Stripe customer FIRST so a failure here doesn't leave a deleted
+  // auth user with an orphaned billing record (GDPR right-to-erasure).
+  // resource_missing is the idempotent case — already deleted / never existed.
+  if (profile?.stripe_customer_id) {
+    try {
+      await getStripe().customers.del(profile.stripe_customer_id)
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code
+      if (code !== 'resource_missing') {
+        log.error('account delete stripe failed', { err, subsystem: 'stripe', op: 'customers.del' })
+        return NextResponse.json(
+          { error: 'Failed to delete account billing record. Please try again or contact support.' },
+          { status: 500 },
+        )
+      }
+    }
+  }
 
   // Now perform the destructive admin call.
   const service = getServiceClient()

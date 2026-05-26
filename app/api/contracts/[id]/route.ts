@@ -20,9 +20,15 @@ export async function DELETE(
     tier: 'free',
   })
   if (!rl.allowed) {
+    // degraded => Upstash backend failed AND policy.failMode='closed'. Surface as 503
+    // so the client knows it's a transient backend issue, not a real quota hit.
+    const status = rl.degraded ? 503 : 429
+    const message = rl.degraded
+      ? 'Service temporarily unavailable. Please try again.'
+      : 'Too many delete requests'
     return NextResponse.json(
-      { error: 'Too many delete requests', limitReached: true },
-      { status: 429, headers: rateLimitHeaders(rl) }
+      { error: message, limitReached: !rl.degraded },
+      { status, headers: rateLimitHeaders(rl) }
     )
   }
 

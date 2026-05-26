@@ -9,6 +9,12 @@ export type RateLimitAction = 'chat' | 'analyze' | 'upload' | 'contract-delete' 
 export type Policy = {
   limit: number
   windowMs: number
+  // 'open' (default): if the Upstash backend is unreachable, allow the request through
+  // and mark the result degraded. Right for cost-control actions where availability beats
+  // perfect quota accounting. 'closed': deny the request on backend outage. Right for
+  // anti-abuse actions on destructive endpoints where unprotected access is worse than
+  // a brief 503.
+  failMode?: 'open' | 'closed'
 }
 
 const MIN = 60_000
@@ -31,14 +37,14 @@ export const POLICIES = {
     team: { limit: 40, windowMs: HOUR },
   },
   'contract-delete': {
-    free: { limit: 60, windowMs: 15 * MIN },
-    pro:  { limit: 60, windowMs: 15 * MIN },
-    team: { limit: 60, windowMs: 15 * MIN },
+    free: { limit: 60, windowMs: 15 * MIN, failMode: 'closed' },
+    pro:  { limit: 60, windowMs: 15 * MIN, failMode: 'closed' },
+    team: { limit: 60, windowMs: 15 * MIN, failMode: 'closed' },
   },
   'account-delete': {
-    free: { limit: 5, windowMs: 15 * MIN },
-    pro:  { limit: 5, windowMs: 15 * MIN },
-    team: { limit: 5, windowMs: 15 * MIN },
+    free: { limit: 5, windowMs: 15 * MIN, failMode: 'closed' },
+    pro:  { limit: 5, windowMs: 15 * MIN, failMode: 'closed' },
+    team: { limit: 5, windowMs: 15 * MIN, failMode: 'closed' },
   },
 } as const satisfies Record<RateLimitAction, Record<PlanType, Policy>>
 
