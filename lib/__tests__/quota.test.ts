@@ -128,7 +128,16 @@ describe('withQuotaClaim', () => {
     }))
 
     expect(out).toEqual({ kind: 'ran', result: { status: 422, error: 'bad file' } })
-    expect(errSpy).toHaveBeenCalledWith('[quota] release failed:', 'leaked')
+    expect(errSpy).toHaveBeenCalledTimes(1)
+    const logged = errSpy.mock.calls[0][0] as string
+    const parsed = JSON.parse(logged)
+    expect(parsed).toMatchObject({
+      level: 'error',
+      msg: 'quota release failed',
+      subsystem: 'quota',
+      op: 'release',
+      err: { message: 'leaked' },
+    })
     errSpy.mockRestore()
   })
 })

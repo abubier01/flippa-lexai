@@ -1,6 +1,7 @@
 import 'server-only'
 import { createHash } from 'crypto'
 import type { PlanType } from '@/lib/plan-limits'
+import { log } from '@/lib/log'
 import { getPolicy, POLICIES, type RateLimitAction, type Policy } from './rate-limit-policies'
 
 type Bucket = { count: number; resetAt: number }
@@ -43,7 +44,12 @@ export type RateLimitResult = {
 function resolvePolicy(action: RateLimitAction, tier: PlanType): Policy {
   const candidate = POLICIES[action]?.[tier]
   if (candidate) return candidate
-  console.warn('rate_limit_unknown_tier', { action, tier })
+  log.warn('rate_limit_unknown_tier', {
+    subsystem: 'rate-limit',
+    event: 'rate_limit_unknown_tier',
+    action,
+    tier,
+  })
   return getPolicy(action, 'free')
 }
 
@@ -172,13 +178,13 @@ async function consumeUpstash(
     }
   } catch (err) {
     const e = err instanceof Error ? err : new Error(String(err))
-    console.error('rate_limit_backend_failure', {
+    log.error('rate_limit_backend_failure', {
+      err: e,
+      subsystem: 'rate-limit',
+      backend: 'upstash',
       event: 'rate_limit_backend_failure',
-      severity: 'warning',
       category: 'rate_limiter',
-      err: e.message,
-      err_name: e.name,
-      err_stack: e.stack,
+      severity: 'warning',
       action,
       tier,
       user_id_hash: shortUserHash(userId),
@@ -231,10 +237,11 @@ export async function consumeRateLimit(input: RateLimitInput): Promise<RateLimit
     const g = globalThis as Record<string, unknown>
     if (!g[PROD_NO_UPSTASH_WARNED_KEY]) {
       g[PROD_NO_UPSTASH_WARNED_KEY] = true
-      console.error('rate_limit_backend_missing', {
+      log.error('rate_limit_backend_missing', {
+        subsystem: 'rate-limit',
         event: 'rate_limit_backend_missing',
-        severity: 'error',
         category: 'rate_limiter',
+        severity: 'error',
         mode: 'in_memory_fallback',
         has_kv_rest_api_url: Boolean(process.env.KV_REST_API_URL),
         has_kv_rest_api_token: Boolean(process.env.KV_REST_API_TOKEN),

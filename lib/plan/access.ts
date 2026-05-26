@@ -1,6 +1,7 @@
 import 'server-only'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { decideActivePlan, type ActivePlan } from './access-logic'
+import { log } from '@/lib/log'
 
 export { decideActivePlan, GRACE_PERIOD_DAYS } from './access-logic'
 export type { ActivePlan, SubscriptionRow } from './access-logic'
@@ -17,7 +18,7 @@ export async function getActivePlan(userId: string): Promise<ActivePlan> {
     .limit(1)
 
   if (error) {
-    console.error('[getActivePlan] subscription query failed:', userId, error.message)
+    log.error('subscription query failed', { err: error, userId, subsystem: 'supabase', op: 'plan.getActive' })
     throw new Error(`getActivePlan failed: ${error.message}`)
   }
 

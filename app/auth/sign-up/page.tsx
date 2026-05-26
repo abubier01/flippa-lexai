@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { log } from '@/lib/log'
 import { Scale, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,7 +39,7 @@ export default function SignUpPage() {
       },
     })
     if (error) {
-      console.error('[auth/sign-up] supabase signUp failed', error)
+      log.error('auth signup failed', { err: error, subsystem: 'supabase', op: 'auth.signup' })
       toast.error(error.message)
       setLoading(false)
       return

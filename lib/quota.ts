@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { log } from '@/lib/log'
 
 type QuotaClaimSuccess = {
   allowed: boolean
@@ -135,12 +136,12 @@ async function releaseQuota(
 ): Promise<void> {
   if (!preferLegacy) {
     const result = await supabase.rpc('release_monthly_contract') as
-      | { error?: { message?: string } | null }
+      | { error?: { message?: string; code?: string } | null }
       | undefined
-    const message = result?.error?.message
-    if (!message) return
-    if (!shouldUseLegacyFallback(message)) {
-      console.error('[quota] release failed:', message)
+    const rpcErr = result?.error
+    if (!rpcErr?.message) return
+    if (!shouldUseLegacyFallback(rpcErr.message, rpcErr.code)) {
+      log.error('quota release failed', { err: rpcErr, subsystem: 'quota', op: 'release', via: 'rpc' })
       return
     }
   }
@@ -150,7 +151,7 @@ async function releaseQuota(
     .select('id, contracts_this_month')
     .maybeSingle<{ id: string; contracts_this_month: number | null }>()
   if (profileError) {
-    console.error('[quota] release failed:', profileError.message)
+    log.error('quota release failed', { err: profileError, subsystem: 'quota', op: 'release', via: 'legacy', phase: 'profile_lookup' })
     return
   }
   if (!profile?.id) return
@@ -161,7 +162,7 @@ async function releaseQuota(
     .update({ contracts_this_month: nextCount })
     .eq('id', profile.id)
   if (updateError?.message) {
-    console.error('[quota] release failed:', updateError.message)
+    log.error('quota release failed', { err: updateError, subsystem: 'quota', op: 'release', via: 'legacy', phase: 'profile_update' })
   }
 }
 

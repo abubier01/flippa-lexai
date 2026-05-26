@@ -206,13 +206,20 @@ Assistant:`
         err: insertErr ?? new Error('no rows returned'),
         code: insertErr?.code,
         userId: user.id,
+        subsystem: 'supabase',
+        op: 'chat_messages.insert',
       })
       return NextResponse.json({ error: SAVE_FAILED_MESSAGE }, { status: 500 })
     }
 
     const placeholder = inserted.find(r => r.role === 'assistant')
     if (!placeholder) {
-      rlog.error('chat.persist.placeholder_missing', { userId: user.id })
+      rlog.error('chat.persist.placeholder_missing', {
+        err: new Error('placeholder row missing after insert'),
+        userId: user.id,
+        subsystem: 'supabase',
+        op: 'chat_messages.insert',
+      })
       return NextResponse.json({ error: SAVE_FAILED_MESSAGE }, { status: 500 })
     }
 
@@ -240,6 +247,8 @@ Assistant:`
               code: updateErr.code,
               userId: user.id,
               placeholderId: placeholder.id,
+              subsystem: 'supabase',
+              op: 'chat_messages.update',
             })
           }
         })
@@ -247,7 +256,13 @@ Assistant:`
     })
     return result.toTextStreamResponse()
   } catch (err) {
-    rlog.error('chat.failed', { err, ...(userId ? { userId } : {}) })
+    rlog.error('chat.failed', {
+      err,
+      subsystem: 'llm',
+      provider: 'groq',
+      op: 'chat',
+      ...(userId ? { userId } : {}),
+    })
     return NextResponse.json({ error: 'Failed to generate response' }, { status: 500 })
   }
 }

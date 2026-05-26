@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { log } from '@/lib/log'
 import ContractAnalysisView from '@/components/contracts/contract-analysis-view'
 import ContractProcessing from '@/components/contracts/contract-processing'
 import { hasTeamAccess } from '@/lib/plan/access'
@@ -48,9 +49,11 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   if (!contractRes.data) notFound()
   const contract = contractRes.data
   if (analysesRes.error) {
-    console.error('[contracts/[id]] failed to load analysis', {
+    log.error('contract analysis load failed', {
+      err: analysesRes.error,
       contractId: id,
-      message: analysesRes.error.message,
+      subsystem: 'supabase',
+      op: 'contract_analyses.fetch',
     })
   }
   const analysis = analysesRes.data?.[0] ?? null

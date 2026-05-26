@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getServiceClient } from '@/lib/supabase/service-role'
+import { log } from '@/lib/log'
 
 // POST /api/tickets — submit a new support ticket (public, no auth required)
 export async function POST(req: NextRequest) {
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[tickets] insert error:', error.message)
+    log.error('tickets insert failed', { err: error, subsystem: 'supabase', op: 'tickets.insert' })
     return NextResponse.json({ error: 'Failed to submit ticket. Please try again.' }, { status: 500 })
   }
 
@@ -70,6 +71,9 @@ export async function GET() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    log.error('tickets list failed', { err: error, subsystem: 'supabase', op: 'tickets.list' })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ tickets })
 }

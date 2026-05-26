@@ -78,9 +78,12 @@ describe('handleCheckoutSessionCompleted', () => {
   })
 
   it('throws when client_reference_id and metadata.userId are both missing', async () => {
+    // Stripe's TS types restrict client_reference_id to string|undefined, but
+    // the runtime API delivers null when unset. Cast through unknown to model
+    // the real-world payload.
     const evt = buildCheckoutSessionCompleted({
       data: { object: { client_reference_id: null, metadata: { userId: null } } },
-    })
+    } as unknown as Parameters<typeof buildCheckoutSessionCompleted>[0])
     await expect(handleCheckoutSessionCompleted(evt)).rejects.toThrow(/no userId/i)
   })
 

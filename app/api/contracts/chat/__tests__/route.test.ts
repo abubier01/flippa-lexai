@@ -61,7 +61,7 @@ const { mockStreamText, makeSupabase } = vi.hoisted(() => {
       data: [
         { id: 'msg-user-1', role: 'user' },
         { id: 'msg-placeholder-1', role: 'assistant' },
-      ],
+      ] as { id: string; role: string }[] | null,
       error: null as { message: string } | null,
     },
     updateResult = { error: null as { message: string } | null },

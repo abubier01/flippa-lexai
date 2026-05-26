@@ -212,10 +212,13 @@ describe('consumeRateLimit (Upstash path)', () => {
     expect(result.limit).toBe(120)        // pro tier
     expect(result.remaining).toBe(120)    // synthetic fresh budget
     expect(errorSpy).toHaveBeenCalled()
-    const call = errorSpy.mock.calls[0]
-    expect(call[0]).toBe('rate_limit_backend_failure')
-    const payload = call[1] as Record<string, unknown>
+    const logged = errorSpy.mock.calls[0][0] as string
+    const payload = JSON.parse(logged) as Record<string, unknown>
     expect(payload).toMatchObject({
+      level: 'error',
+      msg: 'rate_limit_backend_failure',
+      subsystem: 'rate-limit',
+      backend: 'upstash',
       event: 'rate_limit_backend_failure',
       severity: 'warning',
       category: 'rate_limiter',
@@ -224,8 +227,10 @@ describe('consumeRateLimit (Upstash path)', () => {
     })
     expect(payload.user_id_hash).toBeDefined()
     expect(payload.user_id_hash).not.toBe('u_failopen')
-    expect(payload.err_stack).toBeDefined()    // NEW
-    expect(typeof payload.err_stack).toBe('string')  // NEW
+    const err = payload.err as Record<string, unknown>
+    expect(err).toBeDefined()
+    expect(err.message).toBe('ECONNREFUSED')
+    expect(typeof err.stack).toBe('string')
     errorSpy.mockRestore()
   })
 

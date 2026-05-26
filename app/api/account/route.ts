@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
+import { log } from '@/lib/log'
 import { getStripe } from '@/lib/stripe'
 
 export async function DELETE(req: NextRequest) {
@@ -117,7 +118,7 @@ export async function DELETE(req: NextRequest) {
     } catch (err) {
       const code = (err as { code?: string } | null)?.code
       if (code !== 'resource_missing') {
-        console.error('[account/delete] stripe error:', (err as Error).message)
+        log.error('account delete stripe failed', { err, subsystem: 'stripe', op: 'customers.del' })
         return NextResponse.json(
           { error: 'Failed to delete account billing record. Please try again or contact support.' },
           { status: 500 },
@@ -130,7 +131,7 @@ export async function DELETE(req: NextRequest) {
   const service = getServiceClient()
   const { error: deleteError } = await service.auth.admin.deleteUser(user.id)
   if (deleteError) {
-    console.error('[account/delete] error:', deleteError.message)
+    log.error('account delete failed', { err: deleteError, subsystem: 'supabase', op: 'account.delete' })
     return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 })
   }
 

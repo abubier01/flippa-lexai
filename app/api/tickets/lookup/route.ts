@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { log } from '@/lib/log'
 
 // POST /api/tickets/lookup — authenticated lookup for the current user
 export async function POST(req: NextRequest) {
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
     .order('updated_at', { ascending: false })
 
   if (error) {
-    console.error('[tickets/lookup]', error.message)
+    log.error('tickets lookup failed', { err: error, subsystem: 'supabase', op: 'tickets.lookup' })
     return NextResponse.json({ error: 'Failed to look up tickets.' }, { status: 500 })
   }
 

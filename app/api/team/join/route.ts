@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { getActivePlan } from '@/lib/plan/access'
+import { log } from '@/lib/log'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -51,15 +52,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Team is full (max 10 members).' }, { status: 403 })
   }
 
-  await service.from('team_members').upsert({
+  const { error: joinError } = await service.from('team_members').upsert({
     team_id: invite.team_id,
     user_id: user.id,
     role: 'member',
   })
+  if (joinError) {
+    // Silent failure here would let us return success while the user is not
+    // actually a team member. Surface so we notice membership drift in Sentry.
+    log.error('team join upsert failed', {
+      err: joinError,
+      subsystem: 'supabase',
+      op: 'team.join.upsert',
+    })
+  }
 
   // C3: do NOT touch profiles.plan. Team features are gated by team_members
   // membership (already enforced in the UI gates) plus an active owner plan.
-  await service.from('profiles').update({ team_id: invite.team_id }).eq('id', user.id)
+  const { error: profileTeamError } = await service.from('profiles').update({ team_id: invite.team_id }).eq('id', user.id)
+  if (profileTeamError) {
+    log.error('team join profile update failed', {
+      err: profileTeamError,
+      subsystem: 'supabase',
+      op: 'team.join.profile.update',
+    })
+  }
 
   await service.from('team_invites').update({ status: 'accepted' }).eq('id', invite.id)
 
