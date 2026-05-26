@@ -178,7 +178,14 @@ Respond with ONLY a valid JSON object matching this exact schema (no prose, no m
       try {
         const supabase = await createClient()
         await supabase.from('contracts').update({ status: 'failed' }).eq('id', contractId)
-      } catch {}
+      } catch (markErr) {
+        rlog.error('analyze.mark_failed_status_failed', {
+          err: markErr,
+          contractId,
+          subsystem: 'supabase',
+          op: 'analyze.mark_failed',
+        })
+      }
     }
     return NextResponse.json({ error: 'Analysis failed' }, { status: 500 })
   }
