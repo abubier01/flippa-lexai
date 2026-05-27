@@ -64,7 +64,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Mark as processing
-    await supabase.from('contracts').update({ status: 'processing' }).eq('id', contractId)
+    const processingStartedAt = new Date().toISOString()
+    await supabase
+      .from('contracts')
+      .update({
+        status: 'processing',
+        processing_started_at: processingStartedAt,
+        updated_at: processingStartedAt,
+      })
+      .eq('id', contractId)
 
     const contractText = contract.raw_text || ''
     const truncated = contractText.slice(0, ANALYZE_TRUNCATION_CHARS)
@@ -178,7 +186,10 @@ Respond with ONLY a valid JSON object matching this exact schema (no prose, no m
     if (contractId) {
       try {
         const supabase = await createClient()
-        await supabase.from('contracts').update({ status: 'failed' }).eq('id', contractId)
+        await supabase
+          .from('contracts')
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('id', contractId)
       } catch (markErr) {
         rlog.error('analyze.mark_failed_status_failed', {
           err: markErr,
