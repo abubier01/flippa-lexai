@@ -14,11 +14,10 @@ export default defineConfig({
       include: [
         'app/api/account/route.ts',
         'app/api/admin/migrate-blog/route.ts',
-        'app/api/admin/migrate-teams/route.ts',
         'app/api/admin/migrate-tickets/route.ts',
+        'app/api/admin/migrate/route.ts',
         'app/api/admin/seed-blog/route.ts',
-        'app/api/admin/setup-teams/route.ts',
-        'app/api/admin/setup-teams-v2/route.ts',
+        'lib/admin/sql-migrations.ts',
         'app/api/contracts/**/route.ts',
         'app/api/stripe/webhook/route.ts',
         'app/api/team/invite/route.ts',
