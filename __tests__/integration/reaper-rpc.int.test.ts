@@ -32,7 +32,8 @@ describe('P0-3 reap_stuck_processing RPC', () => {
       .from('contracts')
       .select('raw_text, status, processing_started_at, updated_at')
       .in('id', seed.data!.map((r: { id: string }) => r.id))
-    const byText = Object.fromEntries(rows.data!.map((r: { raw_text: string }) => [r.raw_text, r]))
+    type Row = { raw_text: string; status: string; processing_started_at: string | null; updated_at: string }
+    const byText: Record<string, Row> = Object.fromEntries((rows.data as Row[]).map((r) => [r.raw_text, r]))
     expect(byText.stale.status).toBe('failed')
     expect(byText.stale.processing_started_at).toBeNull()
     expect(byText.fresh.status).toBe('processing')
