@@ -17,12 +17,12 @@ function activeSubRow(plan: string, status = 'active') {
 }
 
 describe('getActivePlan', () => {
-  it('no subscription row → tier "free"', async () => {
+  it('no subscription row → tier null + status "none"', async () => {
     supabaseMock = createSupabaseMock({
       tables: { subscriptions: { select: { data: [], error: null } } },
     })
     const r = await getActivePlan('user-1')
-    expect(r.tier).toBe('free')
+    expect(r).toEqual({ tier: null, status: 'none' })
   })
 
   it('active "pro" subscription → tier "pro"', async () => {
@@ -41,7 +41,7 @@ describe('getActivePlan', () => {
     expect((await getActivePlan('user-1')).tier).toBe('team')
   })
 
-  it('Supabase error → throws (does NOT silently return "free")', async () => {
+  it('Supabase error → throws (does NOT silently return fallback tier)', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     supabaseMock = createSupabaseMock({
       tables: { subscriptions: { select: { data: null, error: { message: 'db down' } } } },
@@ -65,7 +65,7 @@ describe('hasTeamAccess', () => {
   it('user is member of team whose owner has team plan → { ok: true, via: "membership", teamId }', async () => {
     supabaseMock = createSupabaseMock({
       tables: {
-        subscriptions: { select: { data: [], error: null } }, // user-1: free
+        subscriptions: { select: { data: [], error: null } }, // user-1: no subscription
         team_members: {
           single: {
             data: { team_id: 'team-99', teams: { owner_id: 'owner-1' } },
@@ -105,7 +105,7 @@ describe('hasTeamAccess', () => {
   it('user in team whose owner downgraded → { ok: false, via: null, teamId }', async () => {
     supabaseMock = createSupabaseMock({
       tables: {
-        subscriptions: { select: { data: [], error: null } }, // free for both
+        subscriptions: { select: { data: [], error: null } }, // no subscription for both
         team_members: {
           single: {
             data: { team_id: 'team-99', teams: { owner_id: 'owner-1' } },

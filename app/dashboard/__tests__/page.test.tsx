@@ -20,7 +20,7 @@ const mockedCreateClient = vi.mocked(createClient)
 
 // Avoid pulling next/link, lucide-react SVGs and date-fns through the renderer
 // in ways that print noise — we still let them render but they're side-effect
-// free.
+// solo tier.
 
 type RpcConfig = Parameters<typeof createSupabaseMock>[0] extends infer T
   ? T extends { rpc?: infer R } ? R : never
@@ -94,7 +94,7 @@ describe('DashboardPage (RSC)', () => {
     const { html, calls } = await renderPage({
       recentContracts: recent,
       profile: {
-        plan: 'free',
+        plan: 'solo',
         contracts_this_month: 3,
         usage_reset_at: new Date().toISOString(),
       },
@@ -157,7 +157,7 @@ describe('DashboardPage (RSC)', () => {
     const { html, calls } = await renderPage({
       recentContracts: [],
       profile: {
-        plan: 'free',
+        plan: 'solo',
         contracts_this_month: 0,
         usage_reset_at: new Date().toISOString(),
       },
@@ -199,7 +199,7 @@ describe('DashboardPage (RSC)', () => {
     const { html } = await renderPage({
       recentContracts: [],
       profile: {
-        plan: 'free',
+        plan: 'solo',
         // 0 so the "1/10 analyses this month" copy doesn't introduce a stray
         // ">1</p>" and let us cleanly count stat values below.
         contracts_this_month: 0,
@@ -248,7 +248,7 @@ describe('DashboardPage (RSC)', () => {
     const { html } = await renderPage({
       recentContracts: [],
       profile: {
-        plan: 'free',
+        plan: 'solo',
         contracts_this_month: 0,
         usage_reset_at: new Date().toISOString(),
       },

@@ -81,7 +81,7 @@ vi.mock('@/lib/plan/access', () => ({
 vi.mock('@/lib/plan-limits', () => ({
   PLAN_LIMITS: {
     pro: { contractsPerMonth: -1 },
-    free: { contractsPerMonth: 5 },
+    solo: { contractsPerMonth: 5 },
     team: { contractsPerMonth: -1 },
   },
 }))
@@ -221,7 +221,7 @@ describe('POST /api/contracts/upload — atomic quota RPC', () => {
   })
 
   it('returns 403 with limitReached when claim is denied (allowed=false)', async () => {
-    getActivePlanMock.mockResolvedValueOnce({ tier: 'free', status: 'active' })
+    getActivePlanMock.mockResolvedValueOnce({ tier: 'solo', status: 'active' })
     mockRpc.mockImplementationOnce((fnName: string) => {
       if (fnName === 'claim_monthly_contract') {
         return {
@@ -242,7 +242,7 @@ describe('POST /api/contracts/upload — atomic quota RPC', () => {
 
     expect(res.status).toBe(403)
     expect(body.limitReached).toBe(true)
-    expect(body.plan).toBe('free')
+    expect(body.plan).toBe('solo')
     expect(body.error).toMatch(/monthly limit/i)
   })
 
@@ -274,7 +274,7 @@ describe('POST /api/contracts/upload — atomic quota RPC', () => {
     // by the atomic Postgres function. We fire two requests "concurrently" via
     // Promise.all; Vitest is single-threaded so this is sequential awaits with
     // a call-counted mock, which is the realistic boundary test for the route.
-    getActivePlanMock.mockResolvedValue({ tier: 'free', status: 'active' })
+    getActivePlanMock.mockResolvedValue({ tier: 'solo', status: 'active' })
 
     let claimCallCount = 0
     mockRpc.mockImplementation((fnName: string) => {

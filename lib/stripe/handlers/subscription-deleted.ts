@@ -35,7 +35,7 @@ export async function handleSubscriptionDeleted(
 
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({ plan: 'free' })
+      .update({ plan: 'solo' })
       .eq('id', userId)
     if (profileError) throw new Error(`profiles downgrade failed: ${profileError.message}`)
 

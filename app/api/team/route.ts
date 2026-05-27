@@ -43,7 +43,7 @@ export async function GET() {
       const profileValue = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
       return {
         ...m,
-        profiles: profileValue ?? { id: m.user_id, full_name: null, plan: 'free' },
+        profiles: profileValue ?? { id: m.user_id, full_name: null, plan: 'solo' },
       }
     })
   } else {
@@ -56,7 +56,7 @@ export async function GET() {
     const profileMap = Object.fromEntries((profileRows || []).map((p) => [p.id, p]))
     members = rawMembers.map((m) => ({
       ...m,
-      profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'free' },
+      profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'solo' },
     }))
   }
 

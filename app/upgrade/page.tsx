@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PRODUCTS } from '@/lib/products'
-import { comparePlans, type PlanType } from '@/lib/plan-limits'
+import { comparePlans, normalizePlanType, type PlanType } from '@/lib/plan-limits'
 import UpgradePageClient from './upgrade-client'
 
 export default async function UpgradePage({
@@ -20,7 +20,7 @@ export default async function UpgradePage({
     .eq('id', user.id)
     .single()
 
-  const currentPlan = (profile?.plan as PlanType) || 'free'
+  const currentPlan = normalizePlanType(profile?.plan)
   const params = await searchParams
   const requestedPlan: PlanType = params.plan === 'team' ? 'team' : 'pro'
 

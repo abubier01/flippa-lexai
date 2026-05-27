@@ -45,17 +45,18 @@ export async function POST(req: NextRequest) {
     // firing the 4-way DB fan-out. Every other route (analyze, upload,
     // contract-delete, account-delete) follows this pattern; chat was the
     // outlier that wasted those queries on already-throttled requests.
-    let active: Awaited<ReturnType<typeof getActivePlan>> = { tier: 'free', status: 'fallback' }
+    let active: Awaited<ReturnType<typeof getActivePlan>> = { tier: 'solo', status: 'fallback' }
     try {
       active = await getActivePlan(user.id)
     } catch (err) {
-      ulog.warn('chat.plan_lookup_failed_fallback_free', { err })
+      ulog.warn('chat.plan_lookup_failed_fallback_solo', { err })
     }
+    const tier = active.tier ?? 'solo'
 
     const rl = await consumeRateLimit({
       action: 'chat',
       userId: user.id,
-      tier: active.tier,
+      tier,
     })
     if (!rl.allowed) {
       return NextResponse.json(
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const plan = active.tier
+    const plan = tier
     const limits = PLAN_LIMITS[plan]
 
     const currentCount = messageCountRes.count || 0

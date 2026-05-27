@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Upload, FileText, AlertTriangle, CheckCircle, ArrowRight, TrendingUp, Zap } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { PLAN_LIMITS, type PlanType } from '@/lib/plan-limits'
+import { PLAN_LIMITS, normalizePlanType, type PlanType } from '@/lib/plan-limits'
 import { log } from '@/lib/log'
 
 interface ContractRiskScoreRow {
@@ -83,7 +83,7 @@ export default async function DashboardPage() {
   const [summary] = (summaryRes.data as ContractScoreSummary[] | null) ?? []
   const profile = profileRes.data
 
-  const plan = (profile?.plan || 'free') as PlanType
+  const plan: PlanType = normalizePlanType(profile?.plan)
   const limits = PLAN_LIMITS[plan]
   let contractsThisMonth = profile?.contracts_this_month || 0
   const usageResetAt = profile?.usage_reset_at ? new Date(profile.usage_reset_at) : new Date()
@@ -140,7 +140,7 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {plan === 'free' && (
+          {plan === 'solo' && (
             <div className="text-right">
               <p className="text-xs text-muted-foreground mb-1">
                 {contractsThisMonth}/{limits.contractsPerMonth} analyses this month
@@ -162,8 +162,8 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Upgrade banner for free users */}
-      {plan === 'free' && usagePercent >= 60 && (
+      {/* Upgrade banner for solo users */}
+      {plan === 'solo' && usagePercent >= 60 && (
         <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-accent rounded-xl border border-primary/20 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">

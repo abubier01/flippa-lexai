@@ -4,6 +4,7 @@ import { getServiceClient } from '@/lib/supabase/service-role'
 import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
 import { log } from '@/lib/log'
 import { getStripe } from '@/lib/stripe'
+import { normalizePlanType } from '@/lib/plan-limits'
 
 export async function DELETE(req: NextRequest) {
   const supabase = await createClient()
@@ -19,8 +20,8 @@ export async function DELETE(req: NextRequest) {
     action: 'account-delete',
     userId: user.id,
     // Anti-abuse flat-limit action — tier doesn't affect the cap.
-    // Pass 'free' as a sentinel; the limit is the same across all tiers.
-    tier: 'free',
+    // Pass 'solo' as a sentinel; the limit is the same across all tiers.
+    tier: 'solo',
   })
   if (!rl.allowed) {
     // degraded => Upstash backend failed AND policy.failMode='closed'. Surface as 503
@@ -52,11 +53,12 @@ export async function DELETE(req: NextRequest) {
       { status: 503 },
     )
   }
-  if (profile?.plan && profile.plan !== 'free') {
+  const profilePlan = normalizePlanType(profile?.plan)
+  if (profilePlan !== 'solo') {
     return NextResponse.json(
       {
         error: 'Cancel your subscription first.',
-        plan: profile.plan,
+        plan: profilePlan,
         requiresPortal: true,
       },
       { status: 409 },

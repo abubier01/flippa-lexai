@@ -9,7 +9,7 @@ export interface SubscriptionRow {
 }
 
 export interface ActivePlan {
-  tier: PlanType
+  tier: PlanType | null
   status: string  // 'none' | 'active' | 'trialing' | 'past_due' | 'past_due_expired' | 'canceled' | ...
 }
 
@@ -17,7 +17,7 @@ export function decideActivePlan(
   sub: SubscriptionRow | null,
   now: Date = new Date(),
 ): ActivePlan {
-  if (!sub) return { tier: 'free', status: 'none' }
+  if (!sub) return { tier: null, status: 'none' }
 
   if (sub.status === 'active' || sub.status === 'trialing') {
     return { tier: sub.plan, status: sub.status }
@@ -30,8 +30,8 @@ export function decideActivePlan(
     if (ageDays <= GRACE_PERIOD_DAYS) {
       return { tier: sub.plan, status: 'past_due' }
     }
-    return { tier: 'free', status: 'past_due_expired' }
+    return { tier: null, status: 'past_due_expired' }
   }
 
-  return { tier: 'free', status: sub.status }
+  return { tier: null, status: sub.status }
 }

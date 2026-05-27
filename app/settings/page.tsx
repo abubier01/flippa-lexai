@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { User, Lock, CreditCard, Loader2, Shield, Bell, Check, Zap } from 'lucide-react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
-import { PLAN_LIMITS, comparePlans, type PlanType } from '@/lib/plan-limits'
+import { PLAN_LIMITS, comparePlans, normalizePlanType, type PlanType } from '@/lib/plan-limits'
 import { PRODUCTS } from '@/lib/products'
 import { DeleteAccountDialog } from '@/components/settings/delete-account-dialog'
 
@@ -21,7 +21,7 @@ export default function SettingsPage() {
   const [pwNew, setPwNew] = useState('')
   const [pwConfirm, setPwConfirm] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
-  const [currentPlan, setCurrentPlan] = useState<PlanType>('free')
+  const [currentPlan, setCurrentPlan] = useState<PlanType>('solo')
   const [contractsUsed, setContractsUsed] = useState(0)
   useEffect(() => {
     const supabase = createClient()
@@ -35,7 +35,7 @@ export default function SettingsPage() {
           .eq('id', data.user.id)
           .single()
         if (profile) {
-          setCurrentPlan((profile.plan || 'free') as PlanType)
+          setCurrentPlan(normalizePlanType(profile.plan))
           setContractsUsed(profile.contracts_this_month || 0)
         }
       }
@@ -126,10 +126,10 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-accent text-primary border border-primary/20">
                 <Shield className="w-3 h-3" />
-                {PLAN_LIMITS[currentPlan]?.name || 'Free'} Plan
+                {PLAN_LIMITS[currentPlan]?.name || 'Solo'} Plan
               </span>
               <span className="text-xs text-muted-foreground">
-                {currentPlan === 'free' ? `${contractsUsed}/5 analyses used this month` : 'Unlimited analyses'}
+                {currentPlan === 'solo' ? `${contractsUsed}/5 analyses used this month` : 'Unlimited analyses'}
               </span>
             </div>
           </div>
@@ -238,12 +238,12 @@ export default function SettingsPage() {
                 Current plan: {PLAN_LIMITS[currentPlan]?.name}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {currentPlan === 'free' && `${contractsUsed} of 5 contract analyses used this month`}
+                {currentPlan === 'solo' && `${contractsUsed} of 5 contract analyses used this month`}
                 {currentPlan === 'pro' && 'Unlimited contract analyses · Unlimited AI chat'}
                 {currentPlan === 'team' && 'Unlimited everything · Up to 10 team members'}
               </p>
             </div>
-            {currentPlan === 'free' ? (
+            {currentPlan === 'solo' ? (
               <span className="text-sm font-bold text-muted-foreground">$0/mo</span>
             ) : (
               <span className="text-sm font-bold text-foreground">
@@ -255,7 +255,7 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {currentPlan !== 'free' && (
+          {currentPlan !== 'solo' && (
             <Button
               size="sm"
               variant="outline"

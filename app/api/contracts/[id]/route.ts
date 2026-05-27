@@ -16,8 +16,8 @@ export async function DELETE(
     action: 'contract-delete',
     userId: user.id,
     // Anti-abuse flat-limit action — tier doesn't affect the cap.
-    // Pass 'free' as a sentinel; the limit is the same across all tiers.
-    tier: 'free',
+    // Pass 'solo' as a sentinel; the limit is the same across all tiers.
+    tier: 'solo',
   })
   if (!rl.allowed) {
     // degraded => Upstash backend failed AND policy.failMode='closed'. Surface as 503

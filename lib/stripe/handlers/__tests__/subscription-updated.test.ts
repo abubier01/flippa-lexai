@@ -70,10 +70,10 @@ describe('handleSubscriptionUpserted', () => {
     expect(supabaseMock.calls.updates.profiles?.[0]).toMatchObject({ plan: 'pro' })
   })
 
-  it('canceled sub: profiles.plan downgrades to "free"', async () => {
+  it('canceled sub: profiles.plan downgrades to "solo"', async () => {
     const evt = setMocks('canceled')
     await handleSubscriptionUpserted(evt)
-    expect(supabaseMock.calls.updates.profiles?.[0]).toMatchObject({ plan: 'free' })
+    expect(supabaseMock.calls.updates.profiles?.[0]).toMatchObject({ plan: 'solo' })
   })
 
   it('throws when profile lookup by stripe_customer_id fails', async () => {

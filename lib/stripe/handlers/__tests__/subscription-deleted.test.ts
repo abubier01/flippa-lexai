@@ -14,7 +14,7 @@ vi.mock('@/lib/supabase/service-role', () => ({
 import { handleSubscriptionDeleted } from '../subscription-deleted'
 
 describe('handleSubscriptionDeleted', () => {
-  it('cancels subscription and downgrades profile to free', async () => {
+  it('cancels subscription and downgrades profile to solo', async () => {
     supabaseMock = createSupabaseMock({
       tables: {
         profiles: { single: { data: { id: 'user-1' }, error: null }, update: { data: null, error: null } },
@@ -26,7 +26,7 @@ describe('handleSubscriptionDeleted', () => {
 
     expect(res.userId).toBe('user-1')
     expect(supabaseMock.calls.updates.subscriptions?.[0]).toMatchObject({ status: 'canceled' })
-    expect(supabaseMock.calls.updates.profiles?.[0]).toEqual({ plan: 'free' })
+    expect(supabaseMock.calls.updates.profiles?.[0]).toEqual({ plan: 'solo' })
   })
 
   it('returns { userId: null } when profile is gone (PGRST116) — graceful', async () => {

@@ -50,7 +50,7 @@ function resolvePolicy(action: RateLimitAction, tier: PlanType): Policy {
     action,
     tier,
   })
-  return getPolicy(action, 'free')
+  return getPolicy(action, 'solo')
 }
 
 function buildKey(action: RateLimitAction, userId: string): string {

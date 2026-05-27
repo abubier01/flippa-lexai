@@ -3,12 +3,12 @@
 exports[`POLICIES > matches the documented starter values 1`] = `
 {
   "account-delete": {
-    "free": {
+    "pro": {
       "failMode": "closed",
       "limit": 5,
       "windowMs": 900000,
     },
-    "pro": {
+    "solo": {
       "failMode": "closed",
       "limit": 5,
       "windowMs": 900000,
@@ -20,12 +20,12 @@ exports[`POLICIES > matches the documented starter values 1`] = `
     },
   },
   "analyze": {
-    "free": {
-      "limit": 12,
-      "windowMs": 3600000,
-    },
     "pro": {
       "limit": 24,
+      "windowMs": 3600000,
+    },
+    "solo": {
+      "limit": 12,
       "windowMs": 3600000,
     },
     "team": {
@@ -34,12 +34,12 @@ exports[`POLICIES > matches the documented starter values 1`] = `
     },
   },
   "chat": {
-    "free": {
-      "limit": 60,
-      "windowMs": 900000,
-    },
     "pro": {
       "limit": 120,
+      "windowMs": 900000,
+    },
+    "solo": {
+      "limit": 60,
       "windowMs": 900000,
     },
     "team": {
@@ -48,12 +48,12 @@ exports[`POLICIES > matches the documented starter values 1`] = `
     },
   },
   "contract-delete": {
-    "free": {
+    "pro": {
       "failMode": "closed",
       "limit": 60,
       "windowMs": 900000,
     },
-    "pro": {
+    "solo": {
       "failMode": "closed",
       "limit": 60,
       "windowMs": 900000,
@@ -65,12 +65,12 @@ exports[`POLICIES > matches the documented starter values 1`] = `
     },
   },
   "upload": {
-    "free": {
-      "limit": 10,
-      "windowMs": 3600000,
-    },
     "pro": {
       "limit": 20,
+      "windowMs": 3600000,
+    },
+    "solo": {
+      "limit": 10,
       "windowMs": 3600000,
     },
     "team": {

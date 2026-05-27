@@ -19,7 +19,7 @@ describe('consumeRateLimit (in-memory path)', () => {
     const result = await consumeRateLimit({
       action: 'chat',
       userId: 'user_test_1',
-      tier: 'free',
+      tier: 'solo',
     })
     expect(result.allowed).toBe(true)
     expect(result.limit).toBe(60)
@@ -28,7 +28,7 @@ describe('consumeRateLimit (in-memory path)', () => {
   })
 
   it('rejects requests over the limit', async () => {
-    const input = { action: 'chat' as const, userId: 'user_test_2', tier: 'free' as const }
+    const input = { action: 'chat' as const, userId: 'user_test_2', tier: 'solo' as const }
     for (let i = 0; i < 60; i++) {
       await consumeRateLimit(input)
     }
@@ -39,48 +39,48 @@ describe('consumeRateLimit (in-memory path)', () => {
   })
 
   it('keys are isolated per user', async () => {
-    const a = await consumeRateLimit({ action: 'chat', userId: 'user_a', tier: 'free' })
-    const b = await consumeRateLimit({ action: 'chat', userId: 'user_b', tier: 'free' })
+    const a = await consumeRateLimit({ action: 'chat', userId: 'user_a', tier: 'solo' })
+    const b = await consumeRateLimit({ action: 'chat', userId: 'user_b', tier: 'solo' })
     expect(a.remaining).toBe(59)
     expect(b.remaining).toBe(59)
   })
 
   it('keys are isolated per action', async () => {
-    const chat = await consumeRateLimit({ action: 'chat', userId: 'user_c', tier: 'free' })
-    const upload = await consumeRateLimit({ action: 'upload', userId: 'user_c', tier: 'free' })
+    const chat = await consumeRateLimit({ action: 'chat', userId: 'user_c', tier: 'solo' })
+    const upload = await consumeRateLimit({ action: 'upload', userId: 'user_c', tier: 'solo' })
     expect(chat.remaining).toBe(59)
     expect(upload.remaining).toBe(9)
   })
 
   it('selects the tier-sized policy', async () => {
-    const free = await consumeRateLimit({ action: 'chat', userId: 'u_free', tier: 'free' })
+    const solo = await consumeRateLimit({ action: 'chat', userId: 'u_solo', tier: 'solo' })
     const pro = await consumeRateLimit({ action: 'chat', userId: 'u_pro', tier: 'pro' })
     const team = await consumeRateLimit({ action: 'chat', userId: 'u_team', tier: 'team' })
-    expect(free.limit).toBe(60)
+    expect(solo.limit).toBe(60)
     expect(pro.limit).toBe(120)
     expect(team.limit).toBe(240)
   })
 
-  it('falls back to free policy on unknown tier (with warning)', async () => {
+  it('falls back to solo policy on unknown tier (with warning)', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     // @ts-expect-error — intentionally passing an unknown tier
     const result = await consumeRateLimit({ action: 'chat', userId: 'u_x', tier: 'enterprise' })
-    expect(result.limit).toBe(60) // free policy limit
+    expect(result.limit).toBe(60) // solo policy limit
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
   })
 
   it('uses flat limit for anti-abuse actions regardless of tier', async () => {
-    const free = await consumeRateLimit({ action: 'account-delete', userId: 'u_acc_free', tier: 'free' })
+    const solo = await consumeRateLimit({ action: 'account-delete', userId: 'u_acc_solo', tier: 'solo' })
     const team = await consumeRateLimit({ action: 'account-delete', userId: 'u_acc_team', tier: 'team' })
-    expect(free.limit).toBe(5)
+    expect(solo.limit).toBe(5)
     expect(team.limit).toBe(5)
   })
 
   it('throws if userId is missing', async () => {
     await expect(
       // @ts-expect-error — userId intentionally absent
-      consumeRateLimit({ action: 'chat', tier: 'free' })
+      consumeRateLimit({ action: 'chat', tier: 'solo' })
     ).rejects.toThrow('userId is required')
   })
 
@@ -88,7 +88,7 @@ describe('consumeRateLimit (in-memory path)', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-05-25T12:00:00Z'))
 
-    const input = { action: 'chat' as const, userId: 'u_reset', tier: 'free' as const }
+    const input = { action: 'chat' as const, userId: 'u_reset', tier: 'solo' as const }
 
     // Burn through the limit
     for (let i = 0; i < 60; i++) {
@@ -144,7 +144,7 @@ describe('consumeRateLimit (Upstash path)', () => {
     const result = await consumeRateLimit({
       action: 'chat',
       userId: 'u_upstash',
-      tier: 'free',
+      tier: 'solo',
     })
 
     expect(result.allowed).toBe(true)
@@ -177,7 +177,7 @@ describe('consumeRateLimit (Upstash path)', () => {
     const result = await consumeRateLimit({
       action: 'chat',
       userId: 'u_blocked',
-      tier: 'free',
+      tier: 'solo',
     })
 
     expect(result.allowed).toBe(false)
@@ -256,7 +256,7 @@ describe('consumeRateLimit (Upstash path)', () => {
     const result = await consumeRateLimit({
       action: 'account-delete',
       userId: 'u_failclosed',
-      tier: 'free',
+      tier: 'solo',
     })
 
     expect(result.allowed).toBe(false)
@@ -284,7 +284,7 @@ describe('consumeRateLimit (Upstash path)', () => {
     const result = await consumeRateLimit({
       action: 'contract-delete',
       userId: 'u_failclosed_contract',
-      tier: 'free',
+      tier: 'solo',
     })
 
     expect(result.allowed).toBe(false)
