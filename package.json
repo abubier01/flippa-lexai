@@ -10,7 +10,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:ci": "vitest run --coverage"
+    "test:ci": "vitest run --coverage",
+    "test:int": "vitest run --config vitest.int.config.ts",
+    "test:int:watch": "vitest --config vitest.int.config.ts",
+    "int:env": "npx supabase status -o env | sed 's/^/INT_/'"
   },
   "dependencies": {
     "@ai-sdk/groq": "^3.0.31",
