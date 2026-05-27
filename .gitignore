@@ -48,3 +48,6 @@ pnpm-debug.log*
 # Local preview/scratch HTML at repo root
 /redesign_preview.html
 /walkthrough.html
+
+# Local plugin lockfile (not source of truth)
+/skills-lock.json
