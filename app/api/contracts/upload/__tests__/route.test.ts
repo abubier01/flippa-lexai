@@ -27,7 +27,7 @@ const { mockRpc, mockFromChain, mockSupabase } = vi.hoisted(() => {
     if (fnName === 'claim_monthly_contract') {
       return {
         single: vi.fn().mockResolvedValue({
-          data: { allowed: true, current_count: 1 },
+          data: { allowed: true, current_count: 1, period_token: '2026-05-01' },
           error: null,
         }),
       }
@@ -182,7 +182,7 @@ beforeEach(() => {
     if (fnName === 'claim_monthly_contract') {
       return {
         single: vi.fn().mockResolvedValue({
-          data: { allowed: true, current_count: 1 },
+          data: { allowed: true, current_count: 1, period_token: '2026-05-01' },
           error: null,
         }),
       }
@@ -226,7 +226,7 @@ describe('POST /api/contracts/upload — atomic quota RPC', () => {
       if (fnName === 'claim_monthly_contract') {
         return {
           single: vi.fn().mockResolvedValue({
-            data: { allowed: false, current_count: 5 },
+            data: { allowed: false, current_count: 5, period_token: '2026-05-01' },
             error: null,
           }),
         }
@@ -283,7 +283,9 @@ describe('POST /api/contracts/upload — atomic quota RPC', () => {
         const allowed = claimCallCount === 1
         return {
           single: vi.fn().mockResolvedValue({
-            data: allowed ? { allowed: true, current_count: 1 } : { allowed: false, current_count: 5 },
+            data: allowed
+              ? { allowed: true, current_count: 1, period_token: '2026-05-01' }
+              : { allowed: false, current_count: 5, period_token: '2026-05-01' },
             error: null,
           }),
         }
