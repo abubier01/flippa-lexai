@@ -39,3 +39,12 @@ pnpm-debug.log*
 # Documentation folders (not source)
 /docs/
 **/docs/
+.vercel
+
+# Worktrees + local agent state
+.worktrees/
+.agents/
+
+# Local preview/scratch HTML at repo root
+/redesign_preview.html
+/walkthrough.html
