@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT,
   avatar_url TEXT,
-  plan TEXT DEFAULT 'free',
+  plan TEXT DEFAULT 'solo',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

@@ -213,9 +213,8 @@ vi.mock('@/lib/plan/access', () => ({
 vi.mock('@/lib/plan-limits', () => ({
   PLAN_LIMITS: {
     pro: { messagesPerContract: -1 },
-    free: { messagesPerContract: 10 },
+    solo: { messagesPerContract: 10 },
     team: { messagesPerContract: -1 },
-    solo: { messagesPerContract: 50 },
   },
 }))
 

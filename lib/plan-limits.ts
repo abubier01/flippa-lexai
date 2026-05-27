@@ -1,4 +1,4 @@
-export type PlanType = 'free' | 'pro' | 'team'
+export type PlanType = 'solo' | 'pro' | 'team'
 
 export interface PlanLimits {
   name: string
@@ -15,8 +15,8 @@ export interface PlanLimits {
 }
 
 export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
-  free: {
-    name: 'Free',
+  solo: {
+    name: 'Solo',
     contractsPerMonth: 5,
     messagesPerContract: 20,
     features: {
@@ -56,9 +56,16 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   },
 }
 
+export function normalizePlanType(plan: string | null | undefined): PlanType {
+  const normalized = (plan || 'solo').toLowerCase()
+  if (normalized === 'free' || normalized === 'solo') return 'solo'
+  if (normalized === 'pro' || normalized === 'team') return normalized
+  return 'solo'
+}
+
 export function getPlanLimits(plan: string | null | undefined): PlanLimits {
-  const normalizedPlan = (plan || 'free').toLowerCase() as PlanType
-  return PLAN_LIMITS[normalizedPlan] || PLAN_LIMITS.free
+  const normalizedPlan = normalizePlanType(plan)
+  return PLAN_LIMITS[normalizedPlan] || PLAN_LIMITS.solo
 }
 
 export function isUnlimited(value: number): boolean {
@@ -71,7 +78,7 @@ export function formatLimit(value: number): string {
 
 export const MAX_TEAM_MEMBERS = 10
 
-const TIER_ORDER: Record<PlanType, number> = { free: 0, pro: 1, team: 2 }
+const TIER_ORDER: Record<PlanType, number> = { solo: 0, pro: 1, team: 2 }
 
 export function comparePlans(a: PlanType, b: PlanType): number {
   return TIER_ORDER[a] - TIER_ORDER[b]

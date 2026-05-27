@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripe } from '@/lib/stripe'
-import { comparePlans, type PlanType } from '@/lib/plan-limits'
+import { comparePlans, normalizePlanType, type PlanType } from '@/lib/plan-limits'
 import { log } from '@/lib/log'
 
 export async function POST(req: NextRequest) {
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       .select('plan')
       .eq('id', user.id)
       .single()
-    const currentPlan = (profile?.plan as PlanType) ?? 'free'
+    const currentPlan = normalizePlanType(profile?.plan)
     if (comparePlans(plan, currentPlan) < 0) {
       return NextResponse.json(
         { error: 'Cannot downgrade via checkout. Use the billing portal.' },

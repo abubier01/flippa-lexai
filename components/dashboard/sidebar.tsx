@@ -27,6 +27,7 @@ import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { useMounted } from '@/hooks/use-mounted'
+import { normalizePlanType } from '@/lib/plan-limits'
 
 const baseNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -48,10 +49,11 @@ export default function DashboardSidebar({ user, profile }: Props) {
   const [collapsed, setCollapsed] = useState(false)
   const mounted = useMounted()
   const { theme, setTheme } = useTheme()
+  const normalizedPlan = normalizePlanType(profile?.plan)
 
   const navItems = [
     ...baseNavItems,
-    ...(profile?.plan === 'team'
+    ...(normalizedPlan === 'team'
       ? [{ href: '/team', label: 'Team', icon: Users }]
       : []),
   ]
@@ -105,10 +107,10 @@ export default function DashboardSidebar({ user, profile }: Props) {
           })}
         </nav>
 
-        {/* Upgrade CTA for free users */}
-        {!collapsed && profile?.plan === 'free' && (
+        {/* Upgrade CTA for solo users */}
+        {!collapsed && normalizedPlan === 'solo' && (
           <div className="mx-2 mb-2 p-3 rounded-lg bg-accent/60 border border-primary/20">
-            <p className="text-xs font-semibold text-foreground mb-0.5">Free Plan</p>
+            <p className="text-xs font-semibold text-foreground mb-0.5">Solo Plan</p>
             <p className="text-xs text-muted-foreground mb-2.5">Upgrade for unlimited analyses.</p>
             <Button asChild size="sm" className="w-full h-7 text-xs">
               <Link href="/upgrade?plan=pro">

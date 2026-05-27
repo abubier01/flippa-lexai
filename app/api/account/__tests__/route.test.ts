@@ -51,7 +51,7 @@ const { mockSupabase, mockAdminDeleteUser, mockStripeCustomersDel } = vi.hoisted
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       single: vi.fn().mockResolvedValue({
-        data: { plan: 'free', stripe_customer_id: 'cus_abc' },
+        data: { plan: 'solo', stripe_customer_id: 'cus_abc' },
         error: null,
       }),
     }),
@@ -152,7 +152,7 @@ function makeSupabase(overrides: {
           app_metadata: { provider: 'email' },
         }
 
-  const plan = overrides.plan ?? 'free'
+  const plan = overrides.plan ?? 'solo'
   const stripeCustomerId = overrides.stripeCustomerId === undefined ? 'cus_abc' : overrides.stripeCustomerId
   const profileError = overrides.profileError ?? null
   const singleResult = profileError
@@ -202,7 +202,7 @@ describe('DELETE /api/account', () => {
     mockAdminDeleteUser.mockResolvedValue({ error: null })
     // Reset Stripe customer delete to success
     mockStripeCustomersDel.mockResolvedValue({ id: 'cus_abc', deleted: true })
-    // Reset supabase createClient to default (free plan, email provider, stripe_customer_id set)
+    // Reset supabase createClient to default (solo plan, email provider, stripe_customer_id set)
     createClientMock.mockResolvedValue(makeSupabase({}))
   })
 
@@ -247,7 +247,7 @@ describe('DELETE /api/account', () => {
   })
 
   // Case 3: Active paid subscription
-  it('returns 409 with requiresPortal: true when plan is not free', async () => {
+  it('returns 409 with requiresPortal: true when plan is not solo', async () => {
     createClientMock.mockResolvedValueOnce(makeSupabase({ plan: 'pro' }))
 
     const res = await DELETE(buildDeleteRequest())

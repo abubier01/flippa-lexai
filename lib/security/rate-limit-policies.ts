@@ -22,27 +22,27 @@ const HOUR = 60 * MIN
 
 export const POLICIES = {
   chat: {
-    free: { limit: 60, windowMs: 15 * MIN },
+    solo: { limit: 60, windowMs: 15 * MIN },
     pro: { limit: 120, windowMs: 15 * MIN },
     team: { limit: 240, windowMs: 15 * MIN },
   },
   analyze: {
-    free: { limit: 12, windowMs: HOUR },
+    solo: { limit: 12, windowMs: HOUR },
     pro: { limit: 24, windowMs: HOUR },
     team: { limit: 48, windowMs: HOUR },
   },
   upload: {
-    free: { limit: 10, windowMs: HOUR },
+    solo: { limit: 10, windowMs: HOUR },
     pro: { limit: 20, windowMs: HOUR },
     team: { limit: 40, windowMs: HOUR },
   },
   'contract-delete': {
-    free: { limit: 60, windowMs: 15 * MIN, failMode: 'closed' },
+    solo: { limit: 60, windowMs: 15 * MIN, failMode: 'closed' },
     pro:  { limit: 60, windowMs: 15 * MIN, failMode: 'closed' },
     team: { limit: 60, windowMs: 15 * MIN, failMode: 'closed' },
   },
   'account-delete': {
-    free: { limit: 5, windowMs: 15 * MIN, failMode: 'closed' },
+    solo: { limit: 5, windowMs: 15 * MIN, failMode: 'closed' },
     pro:  { limit: 5, windowMs: 15 * MIN, failMode: 'closed' },
     team: { limit: 5, windowMs: 15 * MIN, failMode: 'closed' },
   },

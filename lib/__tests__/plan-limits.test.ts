@@ -4,7 +4,7 @@ import { getPlanLimits, isUnlimited, formatLimit, PLAN_LIMITS } from '@/lib/plan
 
 describe('getPlanLimits', () => {
   it.each([
-    ['free', 'Free'],
+    ['solo', 'Solo'],
     ['pro', 'Pro'],
     ['team', 'Team'],
   ])('returns the right limits for "%s"', (plan, expectedName) => {
@@ -12,6 +12,7 @@ describe('getPlanLimits', () => {
   })
 
   it.each([
+    ['free'],
     [null],
     [undefined],
     [''],
@@ -22,7 +23,7 @@ describe('getPlanLimits', () => {
     if (input === 'PRO') {
       expect(got.name).toBe('Pro')
     } else {
-      expect(got.name).toBe('Free')
+      expect(got.name).toBe('Solo')
     }
   })
 })
@@ -56,9 +57,9 @@ describe('formatLimit', () => {
 })
 
 describe('PLAN_LIMITS', () => {
-  it('free has contractsPerMonth=5, messagesPerContract=20', () => {
-    expect(PLAN_LIMITS.free.contractsPerMonth).toBe(5)
-    expect(PLAN_LIMITS.free.messagesPerContract).toBe(20)
+  it('solo has contractsPerMonth=5, messagesPerContract=20', () => {
+    expect(PLAN_LIMITS.solo.contractsPerMonth).toBe(5)
+    expect(PLAN_LIMITS.solo.messagesPerContract).toBe(20)
   })
 
   it('pro has all features true except sharedLibrary and sso', () => {

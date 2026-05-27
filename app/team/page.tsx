@@ -22,7 +22,7 @@ export default async function TeamPage() {
     .eq('id', user.id)
     .single()
 
-  // Check team access via subscription + membership (team members have plan='free'
+  // Check team access via subscription + membership (team members have plan='solo'
   // but should still see the team page when the team owner has an active team plan).
   const access = await hasTeamAccess(user.id)
   if (!access.ok) {
@@ -84,7 +84,7 @@ export default async function TeamPage() {
     team = teamRes.data ?? null
     members = rawMembers.map(m => ({
       ...m,
-      profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'free' },
+      profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'solo' },
     }))
     invites = invitesRes.data ?? []
     sharedContracts = contractsRes.data ?? []

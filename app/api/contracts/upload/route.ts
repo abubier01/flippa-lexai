@@ -34,16 +34,17 @@ export async function POST(req: NextRequest) {
     userId = user.id
     const ulog = rlog.child({ userId })
 
-    let active: Awaited<ReturnType<typeof getActivePlan>> = { tier: 'free', status: 'fallback' }
+    let active: Awaited<ReturnType<typeof getActivePlan>> = { tier: 'solo', status: 'fallback' }
     try {
       active = await getActivePlan(user.id)
     } catch (err) {
-      ulog.warn('upload.plan_lookup_failed_fallback_free', { err })
+      ulog.warn('upload.plan_lookup_failed_fallback_solo', { err })
     }
+    const tier = active.tier ?? 'solo'
     const rl = await consumeRateLimit({
       action: 'upload',
       userId: user.id,
-      tier: active.tier,
+      tier,
     })
     if (!rl.allowed) {
       return NextResponse.json(
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
     // month rolled over, increments it if under the limit, and returns whether
     // the call is allowed. This replaces the old read-modify-write pattern
     // (audit finding #7).
-    const plan = active.tier
+    const plan = tier
     const limits = PLAN_LIMITS[plan]
 
     type UploadResult =
