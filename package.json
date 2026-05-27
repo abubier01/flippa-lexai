@@ -10,7 +10,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:ci": "vitest run --coverage"
+    "test:ci": "vitest run --coverage",
+    "test:int": "vitest run --config vitest.int.config.ts",
+    "test:int:watch": "vitest --config vitest.int.config.ts",
+    "int:env": "npx supabase status -o env | sed -E 's/^API_URL=/INT_SUPABASE_URL=/; s/^ANON_KEY=/INT_SUPABASE_ANON_KEY=/; s/^SERVICE_ROLE_KEY=/INT_SUPABASE_SERVICE_ROLE_KEY=/'"
   },
   "dependencies": {
     "@ai-sdk/groq": "^3.0.31",
@@ -47,6 +50,7 @@
     "@stripe/stripe-js": "^5.6.0",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.0",
+    "@upstash/qstash": "^2.11.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "@vercel/analytics": "1.6.1",
@@ -92,8 +96,8 @@
     "dotenv": "^17.4.2",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.6",
-    "postcss": "^8.5.10",
     "jsdom": "^29.1.1",
+    "postcss": "^8.5.10",
     "tailwindcss": "^4.2.0",
     "tsx": "^4.22.3",
     "tw-animate-css": "1.3.3",

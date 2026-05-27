@@ -25,7 +25,7 @@ describe('withQuotaClaim', () => {
     const supabaseMock = createSupabaseMock({
       rpc: {
         claim_monthly_contract: {
-          single: { data: { allowed: false, current_count: 5 }, error: null },
+          single: { data: { allowed: false, current_count: 5, period_token: '2026-05-01' }, error: null },
         },
       },
     })
@@ -47,7 +47,7 @@ describe('withQuotaClaim', () => {
     const supabaseMock = createSupabaseMock({
       rpc: {
         claim_monthly_contract: {
-          single: { data: { allowed: true, current_count: 1 }, error: null },
+          single: { data: { allowed: true, current_count: 1, period_token: '2026-05-01' }, error: null },
         },
       },
     })
@@ -65,7 +65,7 @@ describe('withQuotaClaim', () => {
     const supabaseMock = createSupabaseMock({
       rpc: {
         claim_monthly_contract: {
-          single: { data: { allowed: true, current_count: 1 }, error: null },
+          single: { data: { allowed: true, current_count: 1, period_token: '2026-05-01' }, error: null },
         },
         release_monthly_contract: {
           single: { data: null, error: null },
@@ -89,7 +89,7 @@ describe('withQuotaClaim', () => {
     const supabaseMock = createSupabaseMock({
       rpc: {
         claim_monthly_contract: {
-          single: { data: { allowed: true, current_count: 1 }, error: null },
+          single: { data: { allowed: true, current_count: 1, period_token: '2026-05-01' }, error: null },
         },
         release_monthly_contract: {
           single: { data: null, error: null },
@@ -113,7 +113,7 @@ describe('withQuotaClaim', () => {
     const supabaseMock = createSupabaseMock({
       rpc: {
         claim_monthly_contract: {
-          single: { data: { allowed: true, current_count: 1 }, error: null },
+          single: { data: { allowed: true, current_count: 1, period_token: '2026-05-01' }, error: null },
         },
         release_monthly_contract: {
           single: { data: null, error: { message: 'leaked' } },
