@@ -64,14 +64,22 @@ const { mockStreamText, makeSupabase } = vi.hoisted(() => {
       ] as { id: string; role: string }[] | null,
       error: null as { message: string } | null,
     },
-    updateResult = { error: null as { message: string } | null },
+    updateResult = {
+      data: [{ id: 'msg-placeholder-1' }] as { id: string }[] | null,
+      error: null as { message: string } | null,
+    },
   } = {}) {
     // .insert([...]).select('id, role') — the .select() resolves the chain.
     const selectAfterInsert = vi.fn().mockResolvedValue(insertResult)
     const insertMock = vi.fn().mockReturnValue({ select: selectAfterInsert })
 
-    // .update({...}).eq('id', placeholderId) — the .eq() resolves the chain.
-    const eqAfterUpdate = vi.fn().mockResolvedValue(updateResult)
+    // .update({...}).eq('id', placeholderId).select('id') — the .select() resolves.
+    // Back-compat: awaiting after .eq() also resolves (for tests that don't chain .select()).
+    const selectAfterUpdate = vi.fn().mockResolvedValue(updateResult)
+    const eqAfterUpdate = vi.fn().mockReturnValue({
+      select: selectAfterUpdate,
+      then: (resolve: (v: typeof updateResult) => unknown) => Promise.resolve(updateResult).then(resolve),
+    })
     const updateMock = vi.fn().mockReturnValue({ eq: eqAfterUpdate })
 
     // Exposes the quota-count chain so tests can assert which filters were applied.
@@ -635,7 +643,7 @@ describe('POST /api/contracts/chat — Plan 4: pre-stream persistence resilience
 
   it('logs chat.persist.update_failed and does not crash when onFinish UPDATE fails', async () => {
     const { supabase } = makeSupabase({
-      updateResult: { error: { message: 'update failed' } },
+      updateResult: { data: null, error: { message: 'update failed' } },
     })
     currentSupabase = supabase
 

@@ -237,10 +237,11 @@ Assistant:`
         // function instance can be torn down before this async work finishes,
         // leaving an orphaned empty assistant placeholder behind.
         after(async () => {
-          const { error: updateErr } = await supabase
+          const { data: updatedRows, error: updateErr } = await supabase
             .from('chat_messages')
             .update({ content: reply })
             .eq('id', placeholder.id)
+            .select('id')
           if (updateErr) {
             // Same rationale as pre_stream_failed: preserve full PostgrestError.
             rlog.error('chat.persist.update_failed', {
@@ -250,6 +251,18 @@ Assistant:`
               placeholderId: placeholder.id,
               subsystem: 'supabase',
               op: 'chat_messages.update',
+            })
+            return
+          }
+          if (!updatedRows || updatedRows.length === 0) {
+            // Tripwire for future RLS regressions on chat_messages.
+            // Migration 012 added the UPDATE policy that prevents this.
+            rlog.error('chat.persist.zero_rows', {
+              userId: user.id,
+              placeholderId: placeholder.id,
+              subsystem: 'supabase',
+              op: 'chat_messages.update',
+              hint: 'check chat_messages UPDATE RLS policy',
             })
           }
         })
