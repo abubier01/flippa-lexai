@@ -13,7 +13,7 @@
     "test:ci": "vitest run --coverage",
     "test:int": "vitest run --config vitest.int.config.ts",
     "test:int:watch": "vitest --config vitest.int.config.ts",
-    "int:env": "npx supabase status -o env | sed 's/^/INT_/'"
+    "int:env": "npx supabase status -o env | sed -E 's/^API_URL=/INT_SUPABASE_URL=/; s/^ANON_KEY=/INT_SUPABASE_ANON_KEY=/; s/^SERVICE_ROLE_KEY=/INT_SUPABASE_SERVICE_ROLE_KEY=/'"
   },
   "dependencies": {
     "@ai-sdk/groq": "^3.0.31",
