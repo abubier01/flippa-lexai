@@ -7,7 +7,7 @@ export default defineConfig({
     globals: false,
     passWithNoTests: false,
     include: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
-    exclude: ['.claude/**', 'node_modules/**', '**/*.int.test.ts'],
+    exclude: ['.claude/**', 'node_modules/**', '.worktrees/**', '**/*.int.test.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
