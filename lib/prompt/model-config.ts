@@ -1,10 +1,35 @@
 // lib/prompt/model-config.ts
-export const MODEL_ID = 'TBD-at-selection';            // pinned in the PR that selects it
-export const MODEL_PARAMS = {
+//
+// Tier 1 pins one model. Decided 2026-05-28: Groq llama-3.3-70b-versatile.
+// Anthropic added in a follow-on PR (will introduce a second matrix row).
+
+export const MODEL_ID = 'llama-3.3-70b-versatile' as const;
+
+export const MODEL_PARAMS = Object.freeze({
   temperature: 0.2,
   top_p: 1,
   max_tokens: 4096,
-  // seed: 42,  // include only if the chosen provider supports it
-} as const;
+  // seed omitted — Groq does not honor it as of pin date.
+} as const);
 
-export const MAX_CONTRACT_TOKENS = 80_000;             // recomputed per model at selection
+// 128k context window on llama-3.3-70b-versatile; leave headroom for output
+// (max_tokens above) + prompt scaffolding (~4k) + safety margin.
+export const MAX_CONTRACT_TOKENS = 100_000;
+
+// Unit cost (USD per 1M tokens) snapshot at pin time. Source: Groq pricing page.
+// Persisted into analysis_runs.cost_usd_micros at request time; do NOT recompute
+// later if pricing changes — historical rows stay accurate.
+export const UNIT_COSTS_USD_PER_MTOK = Object.freeze({
+  input: 0.59,
+  output: 0.79,
+} as const);
+
+export function computeCostMicros(usage: {
+  input_tokens: number;
+  output_tokens: number;
+}): number {
+  // micros = USD * 1_000_000; cost = (tokens / 1_000_000) * USD-per-Mtok
+  const inputMicros = usage.input_tokens * UNIT_COSTS_USD_PER_MTOK.input;
+  const outputMicros = usage.output_tokens * UNIT_COSTS_USD_PER_MTOK.output;
+  return Math.round(inputMicros + outputMicros);
+}
