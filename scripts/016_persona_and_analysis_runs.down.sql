@@ -36,7 +36,7 @@ DROP TABLE IF EXISTS persona_versions;
 DROP TABLE IF EXISTS personas;
 
 -- Remove the admin flag column added at the head of the up migration.
-ALTER TABLE public.users DROP COLUMN IF EXISTS is_platform_admin;
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS is_platform_admin;
 
 -- ---------------------------------------------------------------------------
 -- Recreate empty contract_analyses shell (columns from scripts/001_create_schema.sql).
