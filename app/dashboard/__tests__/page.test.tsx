@@ -277,4 +277,64 @@ describe('DashboardPage (RSC)', () => {
 
     expect(html).toContain('Some dashboard metrics are currently unavailable')
   })
+
+  it('shows explicit non-score states for non-completed contracts', async () => {
+    const recent: RecentContract[] = [
+      {
+        id: 'c1',
+        title: 'Pending MSA',
+        created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+        file_name: 'msa.pdf',
+        status: 'pending',
+        risk_score: 0,
+      },
+      {
+        id: 'c2',
+        title: 'Failed NDA',
+        created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        file_name: 'nda.pdf',
+        status: 'failed',
+        risk_score: 0,
+      },
+    ]
+
+    const { html } = await renderPage({
+      recentContracts: recent,
+      profile: {
+        plan: 'solo',
+        contracts_this_month: 0,
+        usage_reset_at: new Date().toISOString(),
+      },
+      rpc: {
+        get_user_contract_risk_scores: {
+          single: {
+            data: [
+              { contract_id: 'c1', risk_score: 0, status: 'pending', computed_risk_score: null },
+              { contract_id: 'c2', risk_score: 0, status: 'failed', computed_risk_score: null },
+            ],
+            error: null,
+          },
+        },
+        get_user_contract_score_summary: {
+          single: {
+            data: [{
+              total: 2,
+              completed_count: 0,
+              high_risk_count: 0,
+              avg_risk_score: 0,
+              bucket_0_20: 0,
+              bucket_21_40: 0,
+              bucket_41_60: 0,
+              bucket_61_80: 0,
+              bucket_81_100: 0,
+            }],
+            error: null,
+          },
+        },
+      },
+    })
+
+    expect(html).toContain('Analyzing')
+    expect(html).toContain('Unavailable')
+  })
 })

@@ -159,12 +159,13 @@ Respond with ONLY a valid JSON object matching this exact schema (no prose, no m
 
     if (analysisError) throw analysisError
 
-    // Compute risk_score: prefer AI-provided value, but if 0 or missing derive from risk items.
+    // Compute risk_score from normalized risk items so persisted scores stay
+    // consistent with the visible risks. If no risks were returned, fall back
+    // to the model's scalar score.
     const risks = (analysis.risks as Array<{ severity: string }>) || []
     const derivedScore = computeRiskScoreFromRisks(risks)
-    const finalScore = analysis.risk_score && analysis.risk_score > 0
-      ? Math.min(100, Math.max(0, analysis.risk_score))
-      : derivedScore
+    const normalizedModelScore = Math.min(100, Math.max(0, analysis.risk_score))
+    const finalScore = risks.length > 0 ? derivedScore : normalizedModelScore
 
     // Update contract status and risk score
     await supabase.from('contracts').update({
