@@ -12,8 +12,7 @@ import ContractDeleteButton from './contract-delete-button'
 import { FileText, Calendar, Users } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
-import type { Contract, ContractAnalysis, ChatMessage, Risk } from '@/lib/types'
-import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
+import type { Contract, ContractAnalysis, ChatMessage } from '@/lib/types'
 
 interface Props {
   contract: Contract
@@ -44,12 +43,14 @@ export default function ContractAnalysisView({ contract, analysis, initialMessag
     toast.success(shared ? 'Removed from team library.' : 'Shared with team!')
   }
 
-  // Derive the displayed risk score from actual risk items when analysis is available,
-  // so the header badge always matches what is shown in the Risks tab.
-  const risks = (analysis?.risks as Risk[]) || []
-  const displayedRiskScore = analysis
-    ? (risks.length > 0 ? computeRiskScoreFromRisks(risks) : contract.risk_score)
-    : contract.risk_score
+  const hasCompletedScore = contract.status === 'completed' && contract.risk_score !== null
+  const displayedRiskScore = hasCompletedScore ? contract.risk_score : null
+  const riskSummaryLabel =
+    contract.status === 'failed'
+      ? 'Unavailable'
+      : contract.status === 'completed'
+        ? 'Risk Score'
+        : 'Not analyzed'
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20 md:pb-0">
@@ -102,11 +103,14 @@ export default function ContractAnalysisView({ contract, analysis, initialMessag
                 onDeleted={() => router.push('/contracts')}
               />
             )}
-            <div className="text-center">
-              <div className="text-2xl font-bold text-foreground">{displayedRiskScore}</div>
-              <div className="text-xs text-muted-foreground">Risk Score</div>
+            <div className="text-center min-w-20">
+              <div className="text-2xl font-bold text-foreground">{displayedRiskScore ?? '—'}</div>
+              <div className="text-xs text-muted-foreground">{riskSummaryLabel}</div>
             </div>
-            <RiskBadge score={displayedRiskScore} />
+            <RiskBadge
+              score={displayedRiskScore}
+              unavailableLabel={contract.status === 'failed' ? 'Risk unavailable' : 'Not analyzed'}
+            />
           </div>
         </div>
       </div>

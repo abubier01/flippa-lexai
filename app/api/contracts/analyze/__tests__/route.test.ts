@@ -148,6 +148,27 @@ const validAnalysisJson = JSON.stringify({
   suggestions: ['Narrow the scope.'],
 })
 
+const modelBiasedScoreJson = JSON.stringify({
+  summary: 'This is an NDA.',
+  risk_score: 70,
+  key_points: ['Confidentiality required'],
+  risks: [
+    { title: 'Low concern 1', description: 'Minor wording issue.', severity: 'low' },
+    { title: 'Low concern 2', description: 'Minor notice issue.', severity: 'low' },
+  ],
+  clauses: { governing_law: 'California' },
+  suggestions: ['Keep as is.'],
+})
+
+const noRisksJson = JSON.stringify({
+  summary: 'This is an NDA.',
+  risk_score: 70,
+  key_points: ['Confidentiality required'],
+  risks: [],
+  clauses: { governing_law: 'California' },
+  suggestions: ['Ask follow-up questions.'],
+})
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -191,6 +212,34 @@ describe('POST /api/contracts/analyze — happy path', () => {
       (call) => (call[0] as Record<string, unknown>).status === 'completed'
     )
     expect(completedCall).toBeDefined()
+  })
+
+  it('persists risk_score derived from risks when model score differs', async () => {
+    mockGenerateText.mockResolvedValueOnce({ text: modelBiasedScoreJson })
+    const { supabase, updateMock } = makeSupabase()
+    currentSupabase = supabase
+
+    await POST(buildRequest())
+
+    const completedCall = updateMock.mock.calls.find(
+      (call) => (call[0] as Record<string, unknown>).status === 'completed'
+    )
+    expect(completedCall).toBeDefined()
+    expect((completedCall?.[0] as Record<string, unknown>).risk_score).toBe(20)
+  })
+
+  it('falls back to model risk_score when no risks are returned', async () => {
+    mockGenerateText.mockResolvedValueOnce({ text: noRisksJson })
+    const { supabase, updateMock } = makeSupabase()
+    currentSupabase = supabase
+
+    await POST(buildRequest())
+
+    const completedCall = updateMock.mock.calls.find(
+      (call) => (call[0] as Record<string, unknown>).status === 'completed'
+    )
+    expect(completedCall).toBeDefined()
+    expect((completedCall?.[0] as Record<string, unknown>).risk_score).toBe(70)
   })
 })
 

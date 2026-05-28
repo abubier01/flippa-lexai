@@ -64,7 +64,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Mark as processing
-    await supabase.from('contracts').update({ status: 'processing' }).eq('id', contractId)
+    const processingStartedAt = new Date().toISOString()
+    await supabase
+      .from('contracts')
+      .update({
+        status: 'processing',
+        processing_started_at: processingStartedAt,
+        updated_at: processingStartedAt,
+      })
+      .eq('id', contractId)
 
     const contractText = contract.raw_text || ''
     const truncated = contractText.slice(0, ANALYZE_TRUNCATION_CHARS)
@@ -151,12 +159,13 @@ Respond with ONLY a valid JSON object matching this exact schema (no prose, no m
 
     if (analysisError) throw analysisError
 
-    // Compute risk_score: prefer AI-provided value, but if 0 or missing derive from risk items.
+    // Compute risk_score from normalized risk items so persisted scores stay
+    // consistent with the visible risks. If no risks were returned, fall back
+    // to the model's scalar score.
     const risks = (analysis.risks as Array<{ severity: string }>) || []
     const derivedScore = computeRiskScoreFromRisks(risks)
-    const finalScore = analysis.risk_score && analysis.risk_score > 0
-      ? Math.min(100, Math.max(0, analysis.risk_score))
-      : derivedScore
+    const normalizedModelScore = Math.min(100, Math.max(0, analysis.risk_score))
+    const finalScore = risks.length > 0 ? derivedScore : normalizedModelScore
 
     // Update contract status and risk score
     await supabase.from('contracts').update({
@@ -178,7 +187,10 @@ Respond with ONLY a valid JSON object matching this exact schema (no prose, no m
     if (contractId) {
       try {
         const supabase = await createClient()
-        await supabase.from('contracts').update({ status: 'failed' }).eq('id', contractId)
+        await supabase
+          .from('contracts')
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('id', contractId)
       } catch (markErr) {
         rlog.error('analyze.mark_failed_status_failed', {
           err: markErr,

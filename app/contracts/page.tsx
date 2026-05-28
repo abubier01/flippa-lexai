@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button'
 import { FileText, Upload } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import ContractRowActions from '@/components/contracts/contract-row-actions'
-import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 
 const getRiskScoreClass = (score: number) => {
   if (score >= 61) return 'risk-score-high'
@@ -28,23 +27,12 @@ export default async function ContractsPage() {
     .select('*')
     .eq('user_id', user!.id)
     .order('created_at', { ascending: false })
-
-  // Fetch analyses to derive accurate risk scores from actual risk items
-  const { data: analyses } = await supabase
-    .from('contract_analyses')
-    .select('contract_id, risks')
-    .eq('user_id', user!.id)
-
-  const analysisRiskMap: Record<string, number> = {}
-  for (const a of analyses ?? []) {
-    const risks = a.risks as { severity: string }[] || []
-    if (a.contract_id && risks.length > 0) {
-      analysisRiskMap[a.contract_id] = computeRiskScoreFromRisks(risks)
-    }
+  const getRiskDisplay = (status: string, stored: number | null) => {
+    if (status === 'failed') return { score: null as number | null, text: 'Unavailable' }
+    if (status !== 'completed') return { score: null as number | null, text: 'Analyzing' }
+    if (stored === null) return { score: null as number | null, text: 'Unavailable' }
+    return { score: stored, text: null as string | null }
   }
-
-  const effectiveScore = (id: string, stored: number | null) =>
-    analysisRiskMap[id] ?? stored ?? 0
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20 md:pb-0">
@@ -92,7 +80,9 @@ export default async function ContractsPage() {
             </div>
 
             <div className="divide-y divide-border">
-              {contracts.map(contract => (
+              {contracts.map(contract => {
+                const riskDisplay = getRiskDisplay(contract.status, contract.risk_score)
+                return (
                 <div key={contract.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4 px-6 py-4 hover:bg-secondary/30 transition-colors items-center">
                   <div className="sm:col-span-5 flex items-center gap-3 min-w-0">
                     <div className="w-9 h-9 rounded-lg bg-accent flex items-center justify-center shrink-0">
@@ -111,9 +101,13 @@ export default async function ContractsPage() {
                   </div>
 
                   <div className="sm:col-span-2">
-                    <div className={`risk-score-pill ${getRiskScoreClass(effectiveScore(contract.id, contract.risk_score))}`}>
-                      {effectiveScore(contract.id, contract.risk_score)}
-                    </div>
+                    {riskDisplay.score === null ? (
+                      <span className="text-xs text-muted-foreground">{riskDisplay.text}</span>
+                    ) : (
+                      <div className={`risk-score-pill ${getRiskScoreClass(riskDisplay.score)}`}>
+                        {riskDisplay.score}
+                      </div>
+                    )}
                   </div>
 
                   <div className="sm:col-span-2 text-xs text-muted-foreground">
@@ -124,7 +118,8 @@ export default async function ContractsPage() {
                     <ContractRowActions contractId={contract.id} />
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </>
         )}

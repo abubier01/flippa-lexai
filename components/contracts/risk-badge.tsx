@@ -1,9 +1,19 @@
 interface Props {
-  score: number
+  score: number | null
   showLabel?: boolean
+  unavailableLabel?: string
 }
 
-export default function RiskBadge({ score, showLabel = true }: Props) {
+export default function RiskBadge({ score, showLabel = true, unavailableLabel = 'Not analyzed' }: Props) {
+  if (score === null) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full border bg-muted text-muted-foreground border-border">
+        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+        {showLabel ? unavailableLabel : 'N/A'}
+      </span>
+    )
+  }
+
   const level = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low'
   const config = {
     high:   { label: 'High Risk',   classes: 'bg-red-100 text-red-700 border-red-200' },

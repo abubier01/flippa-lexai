@@ -104,8 +104,17 @@ export default async function DashboardPage() {
     }
   }
 
-  const effectiveScore = (id: string, storedScore: number | null) =>
-    analysisRiskMap.get(id) ?? storedScore ?? 0
+  const getRiskDisplay = (id: string, status: string, storedScore: number | null) => {
+    if (status === 'failed') return { score: null as number | null, text: 'Unavailable' }
+    if (status !== 'completed') return { score: null as number | null, text: 'Analyzing' }
+
+    // Prefer the persisted contract score so dashboard/list/detail stay aligned.
+    const resolved = storedScore ?? analysisRiskMap.get(id)
+    if (resolved === null || resolved === undefined) {
+      return { score: null as number | null, text: 'Unavailable' }
+    }
+    return { score: resolved, text: null as string | null }
+  }
 
   // Stat scalars come straight from the summary RPC — no JS aggregation.
   const total = summary?.total ?? 0
@@ -231,7 +240,9 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {contracts.map(contract => (
+            {contracts.map(contract => {
+              const riskDisplay = getRiskDisplay(contract.id, contract.status, contract.risk_score)
+              return (
               <Link
                 key={contract.id}
                 href={`/contracts/${contract.id}`}
@@ -248,15 +259,20 @@ export default async function DashboardPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <div className={`risk-score-pill ${getRiskScoreClass(effectiveScore(contract.id, contract.risk_score))}`}>
-                    {effectiveScore(contract.id, contract.risk_score)}
-                  </div>
+                  {riskDisplay.score === null ? (
+                    <span className="text-xs text-muted-foreground">{riskDisplay.text}</span>
+                  ) : (
+                    <div className={`risk-score-pill ${getRiskScoreClass(riskDisplay.score)}`}>
+                      {riskDisplay.score}
+                    </div>
+                  )}
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${getPipelineStatusClass(contract.status)}`}>
                     {contract.status}
                   </span>
                 </div>
               </Link>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
