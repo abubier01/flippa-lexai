@@ -27,7 +27,7 @@ export interface CompileResult {
 // JSON.stringify on plain objects preserves insertion order, but we explicitly
 // re-build the object to be defensive against future refactors and to keep
 // the hash stable across DB driver quirks (e.g. jsonb key reordering on read).
-function canonicalSerializePersona(p: Persona): string {
+export function canonicalSerializePersona(p: Persona): string {
   return JSON.stringify({
     id: p.id,
     description: p.description,
