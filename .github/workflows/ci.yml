@@ -78,14 +78,8 @@ jobs:
           #   - docs/ (gitignored locally; PRs may add)
           ALLOWED='^(scripts/00[129]_|scripts/008_|scripts/010_|scripts/013_|scripts/016_|scripts/018_|scripts/_checks/|scripts/migrate-teams\.js|scripts/run_team_migration\.mjs|scripts/__tests__/team-viewer-rls\.test\.ts|scripts/_seed/|__tests__/integration/__fixtures__/seed-for-explain\.sql|app/api/contracts/chat/__tests__/route\.test\.ts|lib/contracts/read\.ts|lib/admin/sql-migrations\.ts|docs/)'
 
-          # Team UI still reads contract_analyses (app/team/page.tsx,
-          # components/team/*). Tracked for Phase 9 cutover. Listed explicitly
-          # so a NEW stray reference outside this known set still fails.
-          KNOWN_PHASE9='^(app/team/page\.tsx|components/team/types\.ts|components/team/team-dashboard\.tsx)$'
-
           git grep -lE '\bcontract_analyses\b' \
             | grep -vE "$ALLOWED" \
-            | grep -vE "$KNOWN_PHASE9" \
             > /tmp/stray.txt || true
           if [ -s /tmp/stray.txt ]; then
             echo "❌ Stray contract_analyses references outside allowed paths:"

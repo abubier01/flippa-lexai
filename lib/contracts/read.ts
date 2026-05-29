@@ -119,6 +119,72 @@ export async function getCurrentRunWithPersona(
 }
 
 /**
+ * Bulk read for the team dashboard library + analytics. Returns shared
+ * contracts for `teamId` joined to their current analysis_runs row (via
+ * contracts.current_run_id) in a single PostgREST round-trip. Persona content
+ * is NOT joined — the team UI only needs the structured output (summary,
+ * risk_score, risks[]), not persona labels.
+ *
+ * `run` is null when:
+ *   - the contract has not been analyzed yet (current_run_id IS NULL), or
+ *   - the joined run row was filtered out by RLS (shouldn't happen for team
+ *     viewers — analysis_runs SELECT mirrors contracts ownership/sharing per
+ *     scripts/016).
+ */
+export interface TeamContractRow {
+  id: string
+  title: string
+  status: string
+  risk_score: number
+  created_at: string
+  user_id: string
+  shared_with_team: boolean
+  team_id: string | null
+  run: Pick<AnalysisRunRow, 'id' | 'status' | 'output' | 'created_at'> | null
+}
+
+export async function listTeamContractsWithRuns(
+  teamId: string,
+  client: SupabaseClient,
+): Promise<TeamContractRow[]> {
+  const { data, error } = await client
+    .from('contracts')
+    .select(
+      `
+      id, title, status, risk_score, created_at, user_id,
+      shared_with_team, team_id, current_run_id,
+      run:analysis_runs!current_run_id(
+        id, status, output, created_at
+      )
+      `,
+    )
+    .eq('team_id', teamId)
+    .eq('shared_with_team', true)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  if (!data) return []
+
+  return data.map((row) => {
+    const runEmbed = (row as { run: unknown }).run
+    const runRow = Array.isArray(runEmbed) ? runEmbed[0] : runEmbed
+    return {
+      id: row.id as string,
+      title: row.title as string,
+      status: row.status as string,
+      risk_score: (row.risk_score as number) ?? 0,
+      created_at: row.created_at as string,
+      user_id: row.user_id as string,
+      shared_with_team: row.shared_with_team as boolean,
+      team_id: (row.team_id as string | null) ?? null,
+      run: runRow
+        ? (runRow as Pick<AnalysisRunRow, 'id' | 'status' | 'output' | 'created_at'>)
+        : null,
+    }
+  })
+}
+
+/**
  * For the "Latest analysis failed, previous result shown below" banner
  * (spec § Empty-state matrix). Returns the most recent run for the contract
  * IF it differs from currentRunId. If it matches (or no rows exist), returns

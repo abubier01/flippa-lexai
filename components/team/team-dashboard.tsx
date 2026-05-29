@@ -11,7 +11,6 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import RiskBadge from '@/components/contracts/risk-badge'
-import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 import { MAX_TEAM_MEMBERS } from '@/lib/plan-limits'
 import type { Member, Invite, SharedContract, Analytics, Team } from './types'
 
@@ -41,16 +40,11 @@ export default function TeamDashboard({
 
   const isOwner = team ? members.find(m => m.user_id === currentUserId)?.role === 'owner' : false
 
-  // Effective risk score from analyses
+  // Effective risk score sourced from analysis_runs.output.risk_score
+  // (the integer 0-100 emitted by the prompt compiler). Falls back to the
+  // contracts.risk_score column for rows without a current run.
   function effectiveScore(c: SharedContract) {
-    const analyses = c.contract_analyses || []
-    for (const a of analyses) {
-      const risks = a.risks || []
-      if (risks.length > 0) {
-        return computeRiskScoreFromRisks(risks)
-      }
-    }
-    return c.risk_score ?? 0
+    return c.run?.output?.risk_score ?? c.risk_score ?? 0
   }
 
   async function createTeam() {
@@ -411,9 +405,11 @@ export default function TeamDashboard({
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{c.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {c.contract_analyses?.[0]?.summary
-                            ? c.contract_analyses[0].summary.slice(0, 80) + '...'
-                            : formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                          {c.run?.output?.summary
+                            ? c.run.output.summary.slice(0, 80) + '...'
+                            : c.run == null
+                              ? 'Not analyzed yet'
+                              : formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                         </p>
                       </div>
                     </div>
