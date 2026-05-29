@@ -34,7 +34,7 @@ export async function DELETE(
 
   // RLS policy contracts_delete_own restricts to user_id = auth.uid().
   // The explicit .eq('user_id', user.id) is belt-and-suspenders.
-  // contract_analyses + chat_messages cascade via FK.
+  // analysis_runs + chat_messages cascade via FK.
   const { error, count } = await supabase
     .from('contracts')
     .delete({ count: 'exact' })
