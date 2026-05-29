@@ -22,24 +22,6 @@ export interface Contract {
   updated_at: string
 }
 
-export interface ContractAnalysis {
-  id: string
-  contract_id: string
-  user_id: string
-  summary: string | null
-  key_points: string[]
-  risks: Risk[]
-  clauses: Record<string, string>
-  suggestions: string[]
-  created_at: string
-}
-
-export interface Risk {
-  title: string
-  description: string
-  severity: 'low' | 'medium' | 'high'
-}
-
 export interface ChatMessage {
   id: string
   contract_id: string
