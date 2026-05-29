@@ -9,16 +9,24 @@ import { z } from 'zod';
 
 const SLUG = /^[a-z][a-z0-9_]{0,31}$/;
 
+// `hint` may arrive as null from the DB (canonical serialization writes nulls
+// for missing hints) or as undefined from the seed source. Accept both, then
+// strip the field when null so downstream consumers see a clean optional.
+const HintSchema = z
+  .union([z.string().max(280), z.null()])
+  .optional()
+  .transform((v) => (v == null ? undefined : v));
+
 const KeyClauseSchema = z.object({
   id:    z.string().regex(SLUG),
   label: z.string().min(1).max(80),
-  hint:  z.string().max(280).optional(),
+  hint:  HintSchema,
 });
 
 const RiskAreaSchema = z.object({
   id:    z.string().regex(SLUG),
   label: z.string().min(1).max(80),
-  hint:  z.string().max(280).optional(),
+  hint:  HintSchema,
 });
 
 // Source of truth for persona shape. Used by the admin publish endpoint to
