@@ -243,10 +243,11 @@ BEGIN
     SELECT 1 FROM information_schema.views
      WHERE view_definition ILIKE '%contract_analyses%'
     UNION ALL
+    -- Only count FKs TARGETING contract_analyses (confrelid). FKs sourced FROM
+    -- the table (conrelid) vanish with the DROP and are not a real dependency.
     SELECT 1 FROM pg_constraint
      WHERE contype = 'f'
-       AND (conrelid::regclass::text = 'contract_analyses'
-            OR confrelid::regclass::text = 'contract_analyses')
+       AND confrelid::regclass::text = 'contract_analyses'
     UNION ALL
     SELECT 1 FROM pg_proc WHERE prosrc ILIKE '%contract_analyses%'
     UNION ALL
