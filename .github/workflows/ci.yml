@@ -98,6 +98,27 @@ jobs:
         if: always()
         run: supabase stop --no-backup || true
 
+  prod-build-checks:
+    # P8.2 — Build-time fail-fast for GIT_SHA. The runtime check lives in
+    # lib/prompt/core.ts (throws in production); this job surfaces the
+    # mistake before the deploy even runs. Only enforced on main pushes.
+    name: prod-build-checks
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assert GIT_SHA is present for production build
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$GIT_SHA" ]; then
+            echo "❌ GIT_SHA env var required for production builds"
+            exit 1
+          fi
+          echo "✅ GIT_SHA = $GIT_SHA"
+
   rls-gate:
     # P8.4 — Asserts analysis_runs is server-write-only: no non-SELECT RLS
     # policies, and no INSERT/UPDATE/DELETE grants to user-facing roles

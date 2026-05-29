@@ -12,6 +12,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html'],
       include: [
+        // Existing covered surfaces
         'app/api/account/route.ts',
         'app/api/admin/migrate-blog/route.ts',
         'app/api/admin/migrate-tickets/route.ts',
@@ -36,18 +37,41 @@ export default defineConfig({
         'lib/stripe/handlers/invoice-payment-failed.ts',
         'lib/stripe/handlers/invoice-payment-succeeded.ts',
         'lib/risk-scoring.ts',
+        // P8.5 — Tier 1 modular analysis surfaces. Floor is "block
+        // regression," not "drive aspirational coverage." Adjust the
+        // FLOOR threshold below before lifting the include list.
+        'lib/prompt/**/*.ts',
+        'lib/grounding.ts',
+        'lib/rate-limits.ts',
+        'lib/persona/**/*.ts',
+        'lib/analysis/**/*.ts',
+        'lib/contracts/read.ts',
+        'lib/risk/severity.ts',
+        'lib/admin/**/*.ts',
+        'lib/log/rejection.ts',
       ],
       exclude: [
         '**/__tests__/**',
         '**/*.d.ts',
         'app/**/*.test.{ts,tsx}',
         'lib/**/*.test.{ts,tsx}',
+        // Pure type-only modules — no executable code to cover.
+        'lib/prompt/persona-types.ts',
+        'lib/prompt/output-schema.ts',
       ],
       thresholds: {
-        lines: 94,
-        branches: 80,
-        functions: 92,
-        statements: 91,
+        // FLOOR (2026-05-29): floors are set just below current aggregate
+        // numbers — block regression, do not drive aspirational coverage.
+        // Tier 1 modules lib/analysis/repo.ts, lib/persona/repo.ts,
+        // lib/contracts/read.ts, lib/admin/guard.ts are exercised by
+        // integration tests (vitest.int.config.ts) which v8 unit coverage
+        // does not see, so unit-only numbers understate real coverage.
+        // Raise these in a follow-on PR if/when unit tests for those
+        // surfaces land.
+        lines: 80,
+        functions: 68,
+        branches: 70,
+        statements: 77,
       },
     },
   },
