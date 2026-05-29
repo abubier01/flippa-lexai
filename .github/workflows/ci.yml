@@ -25,3 +25,75 @@ jobs:
 
       - name: Run tests with coverage
         run: npm run test:ci
+
+  drop-table-gate:
+    # P8.1 — Asserts that contract_analyses has zero remaining dependencies
+    # after applying all migrations 001..019, and that no stray runtime code
+    # references the legacy table outside the allowed migration / helper /
+    # known-Phase-9-cutover paths. Required check; blocks cutover regressions.
+    name: drop-table-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start
+        working-directory: ${{ github.workspace }}
+
+      - name: Resolve DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres" >> $GITHUB_ENV
+
+      - name: Apply SQL migrations 001..019 in order
+        run: |
+          for f in $(ls scripts/[0-9][0-9][0-9]_*.sql | grep -v '\.down\.sql$' | sort); do
+            echo "--- $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Assert zero contract_analyses dependencies
+        run: |
+          ROWS=$(psql "$DATABASE_URL" -tA -f scripts/_checks/contract_analyses_deps.sql | grep -v '^$' | wc -l | tr -d ' ')
+          if [ "$ROWS" -ne 0 ]; then
+            echo "❌ contract_analyses has $ROWS lingering dependencies:"
+            psql "$DATABASE_URL" -f scripts/_checks/contract_analyses_deps.sql
+            exit 1
+          fi
+          echo "✅ no contract_analyses dependencies"
+
+      - name: Assert no stray contract_analyses runtime references
+        run: |
+          # Allowed paths (legitimate references that survive the cutover):
+          #   - migration SQL (001/002/008/009/010/013/016/018 + their .down)
+          #   - migration helpers (run_team_migration.mjs, migrate-teams.js)
+          #   - dependency-check SQL
+          #   - integration fixtures + tests asserting historic migration text
+          #   - lib/contracts/read.ts header comment (historical context)
+          #   - lib/admin/sql-migrations.ts metadata description string
+          #   - docs/ (gitignored locally; PRs may add)
+          ALLOWED='^(scripts/00[129]_|scripts/008_|scripts/010_|scripts/013_|scripts/016_|scripts/018_|scripts/_checks/|scripts/migrate-teams\.js|scripts/run_team_migration\.mjs|scripts/__tests__/team-viewer-rls\.test\.ts|scripts/_seed/|__tests__/integration/__fixtures__/seed-for-explain\.sql|app/api/contracts/chat/__tests__/route\.test\.ts|lib/contracts/read\.ts|lib/admin/sql-migrations\.ts|docs/)'
+
+          # Team UI still reads contract_analyses (app/team/page.tsx,
+          # components/team/*). Tracked for Phase 9 cutover. Listed explicitly
+          # so a NEW stray reference outside this known set still fails.
+          KNOWN_PHASE9='^(app/team/page\.tsx|components/team/types\.ts|components/team/team-dashboard\.tsx)$'
+
+          git grep -lE '\bcontract_analyses\b' \
+            | grep -vE "$ALLOWED" \
+            | grep -vE "$KNOWN_PHASE9" \
+            > /tmp/stray.txt || true
+          if [ -s /tmp/stray.txt ]; then
+            echo "❌ Stray contract_analyses references outside allowed paths:"
+            cat /tmp/stray.txt
+            exit 1
+          fi
+          echo "✅ no new stray contract_analyses references"
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup || true
