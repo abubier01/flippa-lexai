@@ -291,11 +291,7 @@ export async function POST(req: NextRequest) {
       ulog.error('failRun_also_failed_after_telemetry', { err: failErr, run_id: run.id })
     })
     return NextResponse.json(
-      {
-        analysis_run_id: run.id,
-        status: 'failed',
-        diagnostics: [{ code: 'PUBLISH_ERROR' }],
-      },
+      { status: 'failed', code: 'PUBLISH_ERROR', analysis_run_id: run.id },
       { status: 500 },
     )
   }
