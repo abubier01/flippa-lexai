@@ -104,19 +104,23 @@ export function PersonaDraftEditor({ personaId, initialDraft, publishedIds }: Dr
   const [dirty, setDirty] = useState(false)
   const [saving, startSaving] = useTransition()
 
-  // Track dirty state on changes.
-  useEffect(() => {
-    setDirty(true)
-  }, [description, keyClauses, riskAreas])
-
-  // Mark NOT dirty on first mount (the effect above runs once at mount too).
+  // Track dirty state on changes (skip first run / mount).
+  // Using a ref + effect that reads (not writes) state on the trigger fields
+  // avoids react-hooks/set-state-in-effect cascading-render warning.
   const mounted = useRef(false)
+  const lastSnapshot = useRef<string>('')
   useEffect(() => {
+    const snapshot = JSON.stringify({ description, keyClauses, riskAreas })
     if (!mounted.current) {
       mounted.current = true
-      setDirty(false)
+      lastSnapshot.current = snapshot
+      return
     }
-  }, [])
+    if (snapshot !== lastSnapshot.current) {
+      lastSnapshot.current = snapshot
+      setDirty(true)
+    }
+  }, [description, keyClauses, riskAreas])
 
   function buildPatch(): Partial<Persona> {
     return {
