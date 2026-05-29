@@ -97,3 +97,63 @@ jobs:
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup || true
+
+  rls-gate:
+    # P8.4 — Asserts analysis_runs is server-write-only: no non-SELECT RLS
+    # policies, and no INSERT/UPDATE/DELETE grants to user-facing roles
+    # (anon, authenticated). Required check.
+    name: rls-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start
+        working-directory: ${{ github.workspace }}
+
+      - name: Resolve DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres" >> $GITHUB_ENV
+
+      - name: Apply SQL migrations 001..019 in order
+        run: |
+          for f in $(ls scripts/[0-9][0-9][0-9]_*.sql | grep -v '\.down\.sql$' | sort); do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Assert no non-SELECT policies on analysis_runs
+        run: |
+          NON_SELECT=$(psql "$DATABASE_URL" -tA -c "
+            SELECT count(*) FROM pg_policies
+             WHERE tablename = 'analysis_runs' AND cmd <> 'SELECT'
+          ")
+          if [ "$NON_SELECT" -ne 0 ]; then
+            echo "❌ analysis_runs has $NON_SELECT non-SELECT policies"
+            psql "$DATABASE_URL" -c "SELECT policyname, cmd FROM pg_policies WHERE tablename='analysis_runs' AND cmd<>'SELECT';"
+            exit 1
+          fi
+          echo "✅ no non-SELECT policies on analysis_runs"
+
+      - name: Assert no INSERT/UPDATE/DELETE grants on analysis_runs to user roles
+        run: |
+          GRANTS=$(psql "$DATABASE_URL" -tA -c "
+            SELECT count(*) FROM information_schema.role_table_grants
+             WHERE table_name = 'analysis_runs'
+               AND privilege_type IN ('INSERT','UPDATE','DELETE')
+               AND grantee NOT IN ('service_role', 'postgres')
+          ")
+          if [ "$GRANTS" -ne 0 ]; then
+            echo "❌ analysis_runs has $GRANTS user-role write grants"
+            psql "$DATABASE_URL" -c "SELECT grantee, privilege_type FROM information_schema.role_table_grants WHERE table_name='analysis_runs' AND privilege_type IN ('INSERT','UPDATE','DELETE');"
+            exit 1
+          fi
+          echo "✅ no user-role write grants on analysis_runs"
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup || true
