@@ -1,0 +1,117 @@
+{
+  "summary": "Vendor-favorable MSA with three material buyer risks: an auto-renewal trap with a 90-day opt-out window and 10% price-bump latitude (§ 2.2), front-loaded annual prepayment with no refund on termination (§ 4.1), and a 6-month liability cap (§ 11.1). Customer also lacks reciprocal IP indemnification (§ 10). Recommend negotiation before signature.",
+  "risk_score": 72,
+  "risks": [
+    {
+      "risk_area_id": "frontloaded_payment",
+      "severity": "high",
+      "title": "Annual prepayment with no refund on termination",
+      "description": "Customer must pay the full annual fee upfront within 30 days and forfeits all prepaid amounts on early termination, shifting cash-flow risk entirely to the buyer.",
+      "evidence": {
+        "type": "quoted",
+        "clause_reference": "§ 4.1",
+        "quoted_text": "All annual fees due in advance within thirty days of contract execution"
+      }
+    },
+    {
+      "risk_area_id": "auto_renewal_trap",
+      "severity": "medium",
+      "title": "Auto-renewal with 90-day opt-out window",
+      "description": "Agreement auto-renews for 12-month terms unless non-renewal notice is given at least 90 days before the renewal date, and Vendor may raise renewal pricing by 10% each cycle.",
+      "evidence": {
+        "type": "quoted",
+        "clause_reference": "§ 2.2",
+        "quoted_text": "Term auto-renews for successive 12-month periods unless either party provides written notice of non-renewal at least 90 days prior to the then-current renewal date"
+      }
+    },
+    {
+      "risk_area_id": "vendor_favorable_liability",
+      "severity": "critical",
+      "title": "Six-month fees liability cap",
+      "description": "Vendor's aggregate liability is capped at fees paid in the six months preceding any claim, which is well below market-standard 12-month mutual caps and may not cover realistic buyer damages.",
+      "evidence": {
+        "type": "quoted",
+        "clause_reference": "§ 11.1",
+        "quoted_text": "Vendor's aggregate liability shall not exceed the fees paid by Customer in the six months preceding the claim"
+      }
+    },
+    {
+      "risk_area_id": "indemnification_gap",
+      "severity": "high",
+      "title": "One-way indemnification favoring Vendor",
+      "description": "Customer indemnifies Vendor but receives no reciprocal indemnification, including no IP indemnity for third-party claims that the Services infringe.",
+      "evidence": {
+        "type": "absence",
+        "missing_concept": "no mutual IP indemnification clause protecting Customer from third-party infringement claims against the Services"
+      }
+    }
+  ],
+  "clauses": [
+    {
+      "key_clause_id": "termination",
+      "presence": {
+        "status": "present",
+        "quoted_text": "Customer may terminate this Agreement for convenience upon one hundred eighty (180) days prior written notice",
+        "concern": "180-day notice window is long and no refund of prepaid fees is permitted on termination."
+      }
+    },
+    {
+      "key_clause_id": "auto_renewal",
+      "presence": {
+        "status": "present",
+        "quoted_text": "Term auto-renews for successive 12-month periods unless either party provides written notice of non-renewal at least 90 days prior to the then-current renewal date",
+        "concern": "90-day opt-out window plus discretionary 10% renewal price increase."
+      }
+    },
+    {
+      "key_clause_id": "liability_cap",
+      "presence": {
+        "status": "present",
+        "quoted_text": "Vendor's aggregate liability shall not exceed the fees paid by Customer in the six months preceding the claim",
+        "concern": "Cap is 6 months of fees; market standard is 12 months mutual."
+      }
+    },
+    {
+      "key_clause_id": "indemnification",
+      "presence": { "status": "absent" }
+    },
+    {
+      "key_clause_id": "data_and_ip",
+      "presence": {
+        "status": "present",
+        "quoted_text": "Vendor is granted a worldwide, royalty-free license to use Customer Data to operate, maintain, and improve the Services, including to train and refine Vendor's machine learning models"
+      }
+    },
+    {
+      "key_clause_id": "payment_terms",
+      "presence": {
+        "status": "present",
+        "quoted_text": "All annual fees due in advance within thirty days of contract execution",
+        "concern": "Annual prepayment with no refund on termination shifts cash risk to buyer."
+      }
+    },
+    {
+      "key_clause_id": "sla",
+      "presence": { "status": "absent" }
+    },
+    {
+      "key_clause_id": "confidentiality",
+      "presence": {
+        "status": "present",
+        "quoted_text": "Each party agrees to protect the other party's Confidential Information using the same degree of care it uses to protect its own confidential information"
+      }
+    },
+    {
+      "key_clause_id": "governing_law",
+      "presence": {
+        "status": "present",
+        "quoted_text": "This Agreement shall be governed by and construed in accordance with the laws of the State of California"
+      }
+    }
+  ],
+  "suggestions": [
+    "Negotiate liability cap to mutual at 12 months fees",
+    "Request 180-day auto-renewal opt-out window",
+    "Move from annual prepayment to net-30 invoicing"
+  ]
+}
