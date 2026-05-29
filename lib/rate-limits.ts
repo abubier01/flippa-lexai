@@ -41,6 +41,21 @@ function failure(scope: RateLimitScope, r: RateLimitResult): RateLimitCheckResul
   }
 }
 
+// KNOWN DEVIATION (Tier 1): the three consumeRateLimit calls below are
+// sequential and consumptive. If the per-tenant or per-tenant-daily check
+// rejects after per-user already incremented, the user's budget is debited
+// for a request that's ultimately denied. Spec § Rate Limiting requires
+// "atomic incr-and-check" within a scope (which Upstash sliding-window
+// guarantees), but is silent on cross-scope atomicity.
+//
+// In Tier 1 practice the wastage is bounded: per-user (10/min) is the
+// most-restrictive scope so it almost always rejects first; cross-scope
+// false debits only occur when a single tenant has many users hitting the
+// 60/min tenant cap or the 2000/day daily cap. At Tier 1 volume this is
+// rare. Tier 2 should move multi-scope decision into a single Lua script
+// or transactional RPC that commits all increments only when allowed.
+//
+// Reviewer note (codex MAJOR): see plan "Known accepted deviations" §.
 export async function checkRateLimit(
   userId: string,
   tenantId: string,

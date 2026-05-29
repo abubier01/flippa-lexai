@@ -93,13 +93,16 @@ export async function POST(req: NextRequest) {
       // Returns null when contract has no current_run_id (analysis pending).
       getCurrentRunWithPersona(contractId, supabase).catch(() => null),
       // Get recent history — user turns only to prevent poisoned assistant turns
-      // from being re-fed into subsequent requests.
+      // from being re-fed into subsequent requests. Order DESC + limit to fetch
+      // the MOST RECENT N messages, then reverse client-side to restore
+      // chronological order for the prompt builder. (ASC + limit would return
+      // the OLDEST N — useless for long threads.)
       supabase
         .from('chat_messages')
         .select('role, content')
         .eq('contract_id', contractId)
         .eq('role', 'user')
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
         .limit(CHAT_HISTORY_MESSAGES),
     ])
 
@@ -159,7 +162,8 @@ export async function POST(req: NextRequest) {
           ),
         }
       : null
-    const history = historyRes.data
+    // Reverse the DESC-fetched history into chronological order for prompt assembly.
+    const history = historyRes.data ? [...historyRes.data].reverse() : null
 
     const requestId = randomUUID()
     const START = `<<<UNTRUSTED-CONTRACT-${requestId}-START>>>`
@@ -174,10 +178,18 @@ export async function POST(req: NextRequest) {
 
     const rawContractText = scrub((contract.raw_text || '').slice(0, CHAT_CONTRACT_TEXT_MAX_CHARS))
 
+    // Risk score: prefer the canonical value from the current analysis run's
+    // output. Only fall back to the contracts column when no run exists yet
+    // (legacy mid-migration rows; goes away once every contract has a run).
+    const riskScoreForPrompt =
+      runWithPersona?.run.output?.risk_score ?? contract.risk_score ?? null
+    const riskScoreLine =
+      riskScoreForPrompt !== null ? `Risk Score: ${riskScoreForPrompt}/100` : 'Risk Score: (not yet analyzed)'
+
     const contractContext = `
 Contract Title: ${scrub(contract.title)}
 File: ${scrub(contract.file_name)}
-Risk Score: ${contract.risk_score}/100
+${riskScoreLine}
 
 ${analysis ? `Summary: ${scrub(analysis.summary)}
 

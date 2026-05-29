@@ -293,6 +293,25 @@ describe('spec test #6 — contract validation', () => {
 // ---------------------------------------------------------------------------
 // Spec test #7 — OUTPUT_SCHEMA_FAIL (made-up enum)
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// CRITICAL — owner-only write gate (codex review finding)
+//
+// Team members can SELECT a shared contract via scripts/010_*.sql RLS, but
+// must NOT be able to trigger an analysis that overwrites the owner's
+// current_run_id with their own userContext.
+// ---------------------------------------------------------------------------
+describe('owner-only write gate (codex review)', () => {
+  it('returns 403 analyze_readonly when caller is not the contract owner', async () => {
+    currentContract = { ...currentContract!, user_id: 'someone-else' }
+    const res = await POST(buildRequest())
+    const body = await res.json()
+    expect(res.status).toBe(403)
+    expect(body.kind).toBe('analyze_readonly')
+    expect(insertRunMock).not.toHaveBeenCalled()
+    expect(callStructuredMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('spec test #7 — OUTPUT_SCHEMA_FAIL', () => {
   it('returns 422 + records OUTPUT_SCHEMA_FAIL diagnostic for unknown risk_area_id', async () => {
     const bad = validModelOutput()

@@ -152,6 +152,23 @@ export async function POST(req: NextRequest) {
   if (contractErr || !contract) {
     return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
   }
+
+  // ---- Step 6b: OWNER-ONLY write gate ---------------------------------------
+  // RLS lets team members SELECT a shared contract (scripts/010_*.sql); without
+  // this check, a team viewer could trigger a new analysis and overwrite the
+  // owner's current_run_id with their own userContext. Mirrors the owner-gate
+  // pattern in app/api/contracts/chat/route.ts. Tier 1 has no collaborator-write
+  // model — writes are strictly owner-only.
+  if (contract.user_id !== userId) {
+    return NextResponse.json(
+      {
+        error: 'Analyze is owner-only for shared team contracts. Ask the contract owner to run analysis.',
+        kind: 'analyze_readonly',
+      },
+      { status: 403 },
+    )
+  }
+
   const contractText: string = typeof contract.raw_text === 'string' ? contract.raw_text : ''
 
   // ---- Step 7: CONTRACT_EMPTY ------------------------------------------------
@@ -251,12 +268,37 @@ export async function POST(req: NextRequest) {
   const latencyMs = Math.round(performance.now() - t0)
 
   // ---- Step 15: telemetry FIRST regardless of outcome -----------------------
-  await updateRunTelemetry(service, run.id, {
-    input_tokens: usage?.input_tokens ?? null,
-    output_tokens: usage?.output_tokens ?? null,
-    cost_usd_micros: usage ? computeCostMicros(usage) : null,
-    latency_ms: latencyMs,
-  })
+  // Wrap in try/catch — if the telemetry update fails (transient DB error),
+  // the run row would otherwise be stranded at status='running' forever.
+  // On telemetry failure, attempt to mark the row failed with PUBLISH_ERROR
+  // so it reaches a terminal state and the user gets a clean response.
+  try {
+    await updateRunTelemetry(service, run.id, {
+      input_tokens: usage?.input_tokens ?? null,
+      output_tokens: usage?.output_tokens ?? null,
+      cost_usd_micros: usage ? computeCostMicros(usage) : null,
+      latency_ms: latencyMs,
+    })
+  } catch (telemetryErr) {
+    ulog.error('telemetry_write_failed', { err: telemetryErr, run_id: run.id })
+    // Best-effort transition to a terminal state. If failRun also throws,
+    // we surface PUBLISH_ERROR to the user — the run row may remain stranded
+    // and the weekly invariant cron will surface it.
+    await failRun(service, run.id, {
+      code: 'PUBLISH_ERROR',
+      detail: 'telemetry_write_failed',
+    }).catch(failErr => {
+      ulog.error('failRun_also_failed_after_telemetry', { err: failErr, run_id: run.id })
+    })
+    return NextResponse.json(
+      {
+        analysis_run_id: run.id,
+        status: 'failed',
+        diagnostics: [{ code: 'PUBLISH_ERROR' }],
+      },
+      { status: 500 },
+    )
+  }
 
   // ---- Step 16: MODEL_ERROR --------------------------------------------------
   if (modelError) {
