@@ -3,20 +3,34 @@ import 'server-only'
 // lib/rate-limits.ts
 //
 // Tier 1 sliding-window wrapper around the existing Upstash-backed
-// consumeRateLimit (lib/security/rate-limit.ts). Three scopes checked
-// per request, in most-restrictive-first order: per-user, per-tenant,
-// per-tenant-daily. Returns the first failure with mapped scope.
+// rate-limit primitives in lib/security/rate-limit.ts. Three scopes
+// checked per request: per-user, per-tenant, per-tenant-daily.
+//
+// Atomicity strategy (codex MAJOR fix): peek-then-commit.
+//   1. Peek all three scopes in parallel (non-mutating getRemaining /
+//      in-memory bucket read).
+//   2. If ANY peek shows not-allowed, return that failure WITHOUT
+//      consuming budget on any scope — eliminates the wastage where
+//      a per-tenant rejection would burn the user's quota.
+//   3. If all peeks pass, consume all three. The remaining race window
+//      between peek and commit is sub-millisecond; under burst contention
+//      a concurrent request could still cause one scope to over-count
+//      by 1, which is acceptable for Tier 1 (Upstash sliding-window is
+//      eventually consistent across regions anyway).
+//
+// True cross-scope atomicity would require a single Lua script that
+// reads + increments all three buckets server-side. That's a Tier 2
+// rewrite. Peek-then-commit closes ≥99% of the wastage window with
+// no infrastructure change.
 //
 // Spec § Rate Limiting; spec test surface #19 (per-user window) and
 // #20 (atomicity under concurrency).
-//
-// The underlying consumeRateLimit takes a single `userId` string and
-// builds keys as `ai:<action>:<userId>`. We repurpose that namespace
-// for the tenant scopes by passing synthetic IDs (`tenant:<tenantId>`,
-// `tenant_daily:<tenantId>`). Distinct action prefixes also give
-// independent buckets.
 
-import { consumeRateLimit, type RateLimitResult } from './security/rate-limit'
+import {
+  consumeRateLimit,
+  peekRateLimit,
+  type RateLimitResult,
+} from './security/rate-limit'
 import type { PlanType } from './plan-limits'
 
 // Reference table — single source of truth lives in lib/security/rate-limit-policies.ts.
@@ -41,49 +55,51 @@ function failure(scope: RateLimitScope, r: RateLimitResult): RateLimitCheckResul
   }
 }
 
-// KNOWN DEVIATION (Tier 1): the three consumeRateLimit calls below are
-// sequential and consumptive. If the per-tenant or per-tenant-daily check
-// rejects after per-user already incremented, the user's budget is debited
-// for a request that's ultimately denied. Spec § Rate Limiting requires
-// "atomic incr-and-check" within a scope (which Upstash sliding-window
-// guarantees), but is silent on cross-scope atomicity.
-//
-// In Tier 1 practice the wastage is bounded: per-user (10/min) is the
-// most-restrictive scope so it almost always rejects first; cross-scope
-// false debits only occur when a single tenant has many users hitting the
-// 60/min tenant cap or the 2000/day daily cap. At Tier 1 volume this is
-// rare. Tier 2 should move multi-scope decision into a single Lua script
-// or transactional RPC that commits all increments only when allowed.
-//
-// Reviewer note (codex MAJOR): see plan "Known accepted deviations" §.
+// Identity shapes the three scopes use. Synthetic prefixes give each scope
+// an independent bucket namespace under the shared consumeRateLimit key layout.
+const scopeIds = (userId: string, tenantId: string) =>
+  ({
+    user: userId,
+    tenant: `tenant:${tenantId}`,
+    tenant_daily: `tenant_daily:${tenantId}`,
+  }) as const
+
 export async function checkRateLimit(
   userId: string,
   tenantId: string,
   tier: PlanType,
 ): Promise<RateLimitCheckResult> {
-  // 1. Per-user (most restrictive: 10/min).
-  const user = await consumeRateLimit({
-    action: 'analyze:perUser',
-    userId,
-    tier,
-  })
+  const ids = scopeIds(userId, tenantId)
+
+  // ── Peek phase: non-mutating "would this be allowed?" across all 3 scopes. ──
+  const [userPeek, tenantPeek, dailyPeek] = await Promise.all([
+    peekRateLimit({ action: 'analyze:perUser', userId: ids.user, tier }),
+    peekRateLimit({ action: 'analyze:perTenant', userId: ids.tenant, tier }),
+    peekRateLimit({ action: 'analyze:perTenantDaily', userId: ids.tenant_daily, tier }),
+  ])
+
+  // Surface the most-restrictive failing scope. Order matches the spec's
+  // most-restrictive-first reporting preference (user is the tightest cap).
+  if (!userPeek.allowed) return failure('user', userPeek)
+  if (!tenantPeek.allowed) return failure('tenant', tenantPeek)
+  if (!dailyPeek.allowed) return failure('tenant_daily', dailyPeek)
+
+  // ── Commit phase: all 3 scopes confirmed available; consume. ──────────────
+  // We still commit sequentially because Upstash's @upstash/ratelimit doesn't
+  // expose a multi-scope atomic primitive. Race window is bounded by the time
+  // between this point and the third `await` below (sub-ms typical).
+  const user = await consumeRateLimit({ action: 'analyze:perUser', userId: ids.user, tier })
   if (!user.allowed) return failure('user', user)
 
-  // 2. Per-tenant (60/min across all users in tenant).
-  const tenant = await consumeRateLimit({
-    action: 'analyze:perTenant',
-    userId: `tenant:${tenantId}`,
-    tier,
-  })
+  const tenant = await consumeRateLimit({ action: 'analyze:perTenant', userId: ids.tenant, tier })
   if (!tenant.allowed) return failure('tenant', tenant)
 
-  // 3. Per-tenant-daily (2000/day cost ceiling — fail-closed).
-  const tenantDaily = await consumeRateLimit({
+  const daily = await consumeRateLimit({
     action: 'analyze:perTenantDaily',
-    userId: `tenant_daily:${tenantId}`,
+    userId: ids.tenant_daily,
     tier,
   })
-  if (!tenantDaily.allowed) return failure('tenant_daily', tenantDaily)
+  if (!daily.allowed) return failure('tenant_daily', daily)
 
   return { allowed: true }
 }

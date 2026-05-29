@@ -121,6 +121,9 @@ type UpstashLimitResult = {
 
 type LimiterInstance = {
   limit: (key: string) => Promise<UpstashLimitResult>
+  // Non-mutating "would this be allowed?" check used by peekRateLimit. Returns
+  // the same shape minus `success` since peek doesn't change bucket state.
+  getRemaining: (key: string) => Promise<{ remaining: number; reset: number }>
 }
 
 const limiterCache = new Map<LimiterCacheKey, LimiterInstance>()
@@ -209,6 +212,115 @@ async function consumeUpstash(
       degraded: true,
     }
   }
+}
+
+// ─── Peek (non-consumptive) ──────────────────────────────────────────────────
+
+function peekInMemory(
+  action: RateLimitAction,
+  userId: string,
+  policy: Policy,
+  now: number,
+): RateLimitResult {
+  const store = getStore()
+  const key = buildKey(action, userId)
+  const bucket = store.get(key)
+
+  // No bucket yet, or expired → full budget would be available.
+  if (!bucket || bucket.resetAt <= now) {
+    return {
+      allowed: true,
+      limit: policy.limit,
+      remaining: policy.limit,
+      resetAt: now + policy.windowMs,
+      retryAfterSeconds: 0,
+    }
+  }
+  const remaining = Math.max(0, policy.limit - bucket.count)
+  return {
+    allowed: remaining > 0,
+    limit: policy.limit,
+    remaining,
+    resetAt: bucket.resetAt,
+    retryAfterSeconds:
+      remaining > 0 ? 0 : Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
+  }
+}
+
+async function peekUpstash(
+  action: RateLimitAction,
+  userId: string,
+  tier: PlanType,
+  policy: Policy,
+  now: number,
+): Promise<RateLimitResult> {
+  try {
+    const limiter = await getLimiter(action, tier, policy)
+    const { remaining, reset } = await limiter.getRemaining(buildKey(action, userId))
+    return {
+      allowed: remaining > 0,
+      limit: policy.limit,
+      remaining,
+      resetAt: reset,
+      retryAfterSeconds:
+        remaining > 0 ? 0 : Math.max(1, Math.ceil((reset - now) / 1000)),
+    }
+  } catch (err) {
+    const e = err instanceof Error ? err : new Error(String(err))
+    log.error('rate_limit_backend_failure', {
+      err: e,
+      subsystem: 'rate-limit',
+      backend: 'upstash',
+      event: 'rate_limit_backend_failure',
+      category: 'rate_limiter',
+      severity: 'warning',
+      action,
+      tier,
+      op: 'peek',
+      user_id_hash: shortUserHash(userId),
+    })
+    // Match consumeUpstash error semantics: fail-closed budgets stay closed,
+    // fail-open budgets remain open. A degraded peek that says allowed:true
+    // still gates the eventual consume — degradation is consistent.
+    if (policy.failMode === 'closed') {
+      return {
+        allowed: false,
+        limit: policy.limit,
+        remaining: 0,
+        resetAt: now + policy.windowMs,
+        retryAfterSeconds: Math.max(1, Math.ceil(policy.windowMs / 1000)),
+        degraded: true,
+      }
+    }
+    return {
+      allowed: true,
+      limit: policy.limit,
+      remaining: policy.limit,
+      resetAt: now + policy.windowMs,
+      retryAfterSeconds: 0,
+      degraded: true,
+    }
+  }
+}
+
+export async function peekRateLimit(input: RateLimitInput): Promise<RateLimitResult> {
+  const { action, userId, tier } = input
+  if (!userId) {
+    throw new Error('peekRateLimit: userId is required')
+  }
+  const policy = resolvePolicy(action, tier)
+  const now = Date.now()
+
+  const useUpstash =
+    typeof process.env.KV_REST_API_URL === 'string' &&
+    process.env.KV_REST_API_URL.length > 0 &&
+    typeof process.env.KV_REST_API_TOKEN === 'string' &&
+    process.env.KV_REST_API_TOKEN.length > 0
+
+  if (useUpstash) {
+    return peekUpstash(action, userId, tier, policy, now)
+  }
+  return peekInMemory(action, userId, policy, now)
 }
 
 // ─── Public entry point ──────────────────────────────────────────────────────

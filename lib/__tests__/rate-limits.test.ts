@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 
 import { checkRateLimit } from '../rate-limits'
+import { peekRateLimit, consumeRateLimit } from '../security/rate-limit'
 
 const HAS_UPSTASH =
   typeof process.env.KV_REST_API_URL === 'string' &&
@@ -79,6 +80,123 @@ describe('checkRateLimit — per-tenant-daily key isolation', () => {
     expect(keys.some(k => k === 'ai:analyze:perUser:u_td')).toBe(true)
     expect(keys.some(k => k === 'ai:analyze:perTenant:tenant:t_td')).toBe(true)
     expect(keys.some(k => k === 'ai:analyze:perTenantDaily:tenant_daily:t_td')).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// codex MAJOR — peek-then-commit prevents cross-scope budget wastage
+// ---------------------------------------------------------------------------
+describe('checkRateLimit — peek-then-commit (codex MAJOR fix)', () => {
+  beforeEach(() => {
+    delete (globalThis as Record<string, unknown>).__lexaiRateLimitStore
+    if (!HAS_UPSTASH) {
+      delete process.env.KV_REST_API_URL
+      delete process.env.KV_REST_API_TOKEN
+    }
+  })
+
+  it('peekRateLimit does not decrement the bucket', async () => {
+    const action = 'analyze:perUser' as const
+    await consumeRateLimit({ action, userId: 'u_peek', tier: 'solo' })
+    const before = await peekRateLimit({ action, userId: 'u_peek', tier: 'solo' })
+    // Two peeks back-to-back must report identical remaining (peek is non-mutating).
+    const after = await peekRateLimit({ action, userId: 'u_peek', tier: 'solo' })
+    expect(after.remaining).toBe(before.remaining)
+    expect(after.allowed).toBe(true)
+  })
+
+  it('per-tenant rejection does NOT consume per-user budget', async () => {
+    const tenantId = 't_no_waste'
+    // Saturate per-tenant by spending all 60 across 60 unique users (one each;
+    // none of them hits the per-user cap).
+    for (let i = 0; i < 60; i++) {
+      const r = await checkRateLimit(`u_filler_${i}`, tenantId, 'solo')
+      expect(r.allowed).toBe(true)
+    }
+    // Brand-new user enters the same tenant — must be rejected at the tenant
+    // scope WITHOUT debiting their personal 10/min budget.
+    const victim = 'u_victim_no_waste'
+    const rejected = await checkRateLimit(victim, tenantId, 'solo')
+    expect(rejected.allowed).toBe(false)
+    if (!rejected.allowed) expect(rejected.scope).toBe('tenant')
+
+    // Peek the victim's per-user bucket directly — must show full budget
+    // (10 remaining); the rejected checkRateLimit must not have decremented.
+    const victimPeek = await peekRateLimit({
+      action: 'analyze:perUser',
+      userId: victim,
+      tier: 'solo',
+    })
+    expect(victimPeek.remaining).toBe(10)
+  })
+
+  it('per-tenant-daily rejection does NOT consume per-user or per-tenant budget', async () => {
+    // Pre-seed the per-tenant-daily bucket to 2000 via direct consumes; then
+    // a checkRateLimit call must reject at tenant_daily without touching the
+    // other two scopes.
+    const tenantId = 't_daily_no_waste'
+    // Saturate the daily bucket through the synthetic id the wrapper uses.
+    for (let i = 0; i < 2000; i++) {
+      const r = await consumeRateLimit({
+        action: 'analyze:perTenantDaily',
+        userId: `tenant_daily:${tenantId}`,
+        tier: 'solo',
+      })
+      if (!r.allowed) break
+    }
+    const dailyPeek = await peekRateLimit({
+      action: 'analyze:perTenantDaily',
+      userId: `tenant_daily:${tenantId}`,
+      tier: 'solo',
+    })
+    expect(dailyPeek.allowed).toBe(false)
+
+    const victim = 'u_daily_victim'
+    const rejected = await checkRateLimit(victim, tenantId, 'solo')
+    expect(rejected.allowed).toBe(false)
+    if (!rejected.allowed) expect(rejected.scope).toBe('tenant_daily')
+
+    // Per-user budget intact.
+    const userPeek = await peekRateLimit({
+      action: 'analyze:perUser',
+      userId: victim,
+      tier: 'solo',
+    })
+    expect(userPeek.remaining).toBe(10)
+    // Per-tenant budget intact.
+    const tenantPeek = await peekRateLimit({
+      action: 'analyze:perTenant',
+      userId: `tenant:${tenantId}`,
+      tier: 'solo',
+    })
+    expect(tenantPeek.remaining).toBe(60)
+  })
+
+  it('all-allowed happy path still consumes all three scopes', async () => {
+    const userId = 'u_happy'
+    const tenantId = 't_happy'
+    const r = await checkRateLimit(userId, tenantId, 'solo')
+    expect(r.allowed).toBe(true)
+
+    // After one allowed request, each scope must be down by exactly 1.
+    const userPeek = await peekRateLimit({
+      action: 'analyze:perUser',
+      userId,
+      tier: 'solo',
+    })
+    expect(userPeek.remaining).toBe(9)
+    const tenantPeek = await peekRateLimit({
+      action: 'analyze:perTenant',
+      userId: `tenant:${tenantId}`,
+      tier: 'solo',
+    })
+    expect(tenantPeek.remaining).toBe(59)
+    const dailyPeek = await peekRateLimit({
+      action: 'analyze:perTenantDaily',
+      userId: `tenant_daily:${tenantId}`,
+      tier: 'solo',
+    })
+    expect(dailyPeek.remaining).toBe(1999)
   })
 })
 
