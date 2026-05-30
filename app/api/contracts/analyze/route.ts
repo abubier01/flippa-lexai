@@ -32,6 +32,7 @@ import { getServiceClient } from '@/lib/supabase/service-role-core'
 import { logger } from '@/lib/log/request'
 import { logRejection } from '@/lib/log/rejection'
 import { consumeRateLimitMultiScope } from '@/lib/security/rate-limit-multi'
+import { rejected, failed, success } from '@/lib/api/responses'
 import { validateAndScrub, UserContextError } from '@/lib/prompt/user-context'
 import { compile } from '@/lib/prompt/compile'
 import { buildOutputSchema } from '@/lib/prompt/output-schema'
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
     data: { user },
   } = await userClient.auth.getUser()
   if (!user) {
-    return NextResponse.json({ status: 'rejected', code: 'UNAUTHENTICATED' }, { status: 401 })
+    return rejected('UNAUTHENTICATED', 401)
   }
   const userId = user.id
   const ulog = rlog.child({ userId })
@@ -103,17 +104,11 @@ export async function POST(req: NextRequest) {
       scope: rl.scope,
       retryAfterSeconds: rl.retryAfterSeconds,
     })
-    return NextResponse.json(
-      {
-        status: 'rejected',
-        code: 'RATE_LIMITED',
-        scope: rl.scope,
-        retry_after_seconds: rl.retryAfterSeconds,
-      },
-      {
-        status: 429,
-        headers: { 'Retry-After': String(rl.retryAfterSeconds) },
-      },
+    return rejected(
+      'RATE_LIMITED',
+      429,
+      { scope: rl.scope, retry_after_seconds: rl.retryAfterSeconds },
+      { headers: { 'Retry-After': String(rl.retryAfterSeconds) } },
     )
   }
 
@@ -142,7 +137,7 @@ export async function POST(req: NextRequest) {
           contractId,
           rawLength: typeof body.userContext === 'string' ? body.userContext.length : undefined,
         })
-        return NextResponse.json({ status: 'rejected', code: err.code }, { status: 400 })
+        return rejected(err.code, 400)
       }
       throw err
     }
@@ -179,7 +174,7 @@ export async function POST(req: NextRequest) {
   // ---- Step 7: CONTRACT_EMPTY ------------------------------------------------
   if (contractText.trim().length === 0) {
     logRejection(ulog, { code: 'CONTRACT_EMPTY', userId, contractId })
-    return NextResponse.json({ status: 'rejected', code: 'CONTRACT_EMPTY' }, { status: 400 })
+    return rejected('CONTRACT_EMPTY', 400)
   }
 
   // ---- Step 8: CONTRACT_TOO_LONG --------------------------------------------
@@ -191,10 +186,7 @@ export async function POST(req: NextRequest) {
       contractId,
       tokens: estimatedTokens,
     })
-    return NextResponse.json(
-      { status: 'rejected', code: 'CONTRACT_TOO_LONG' },
-      { status: 400 },
-    )
+    return rejected('CONTRACT_TOO_LONG', 400)
   }
 
   // ---- Step 9: load persona + re-validate -----------------------------------
@@ -212,10 +204,7 @@ export async function POST(req: NextRequest) {
       tags: { event: 'persona_invalid', persona_version_id: personaVersion.id },
       extra: { issues: JSON.stringify(personaParsed.error.issues).slice(0, 2000) },
     })
-    return NextResponse.json(
-      { status: 'rejected', code: 'PERSONA_INVALID' },
-      { status: 500 },
-    )
+    return rejected('PERSONA_INVALID', 500)
   }
   const persona = personaParsed.data
 
@@ -251,16 +240,11 @@ export async function POST(req: NextRequest) {
     })
   } catch (err) {
     if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'conflict') {
-      return NextResponse.json(
-        {
-          status: 'rejected',
-          code: 'ANALYSIS_ALREADY_RUNNING',
-          retry_after_seconds: 3,
-        },
-        {
-          status: 409,
-          headers: { 'Retry-After': '3' },
-        },
+      return rejected(
+        'ANALYSIS_ALREADY_RUNNING',
+        409,
+        { retry_after_seconds: 3 },
+        { headers: { 'Retry-After': '3' } },
       )
     }
     throw err
@@ -315,10 +299,7 @@ export async function POST(req: NextRequest) {
     }).catch(failErr => {
       ulog.error('failRun_also_failed_after_telemetry', { err: failErr, run_id: run.id })
     })
-    return NextResponse.json(
-      { status: 'failed', code: 'PUBLISH_ERROR', analysis_run_id: run.id },
-      { status: 500 },
-    )
+    return failed('PUBLISH_ERROR', 500, { analysis_run_id: run.id })
   }
 
   // ---- Step 16a: SchemaGenerationError → OUTPUT_SCHEMA_FAIL (422) -----------
@@ -336,10 +317,7 @@ export async function POST(req: NextRequest) {
       contractId,
       err: schemaGenError,
     })
-    return NextResponse.json(
-      { status: 'failed', code: 'OUTPUT_SCHEMA_FAIL', analysis_run_id: run.id },
-      { status: 422 },
-    )
+    return failed('OUTPUT_SCHEMA_FAIL', 422, { analysis_run_id: run.id })
   }
 
   // ---- Step 16: MODEL_ERROR --------------------------------------------------
@@ -351,10 +329,7 @@ export async function POST(req: NextRequest) {
       contractId,
       err: modelError,
     })
-    return NextResponse.json(
-      { status: 'failed', code: 'MODEL_ERROR', analysis_run_id: run.id },
-      { status: 502 },
-    )
+    return failed('MODEL_ERROR', 502, { analysis_run_id: run.id })
   }
 
   // ---- Step 17: OUTPUT_SCHEMA_FAIL ------------------------------------------
@@ -364,30 +339,20 @@ export async function POST(req: NextRequest) {
       code: 'OUTPUT_SCHEMA_FAIL',
       detail: parsed.error.flatten(),
     })
-    return NextResponse.json(
-      {
-        status: 'failed',
-        code: 'OUTPUT_SCHEMA_FAIL',
-        analysis_run_id: run.id,
-        issues: parsed.error.flatten(),
-      },
-      { status: 422 },
-    )
+    return failed('OUTPUT_SCHEMA_FAIL', 422, {
+      analysis_run_id: run.id,
+      issues: parsed.error.flatten(),
+    })
   }
 
   // ---- Step 18: GROUNDING_FAIL ----------------------------------------------
   const failures = verifyGrounding(parsed.data, contractText)
   if (failures.length > 0) {
     await failRun(service, run.id, { code: 'GROUNDING_FAIL', failures })
-    return NextResponse.json(
-      {
-        status: 'failed',
-        code: 'GROUNDING_FAIL',
-        analysis_run_id: run.id,
-        failures,
-      },
-      { status: 422 },
-    )
+    return failed('GROUNDING_FAIL', 422, {
+      analysis_run_id: run.id,
+      failures,
+    })
   }
 
   // ---- Step 19: promote ------------------------------------------------------
@@ -404,10 +369,7 @@ export async function POST(req: NextRequest) {
       contractId,
       err,
     })
-    return NextResponse.json(
-      { status: 'failed', code: 'PUBLISH_ERROR', analysis_run_id: run.id },
-      { status: 500 },
-    )
+    return failed('PUBLISH_ERROR', 500, { analysis_run_id: run.id })
   }
 
   const { data: promotedContract, error: promotedContractErr } = await service
@@ -442,10 +404,7 @@ export async function POST(req: NextRequest) {
         error: promotedContractErr ? JSON.stringify(promotedContractErr) : null,
       },
     })
-    return NextResponse.json(
-      { status: 'failed', code: 'PUBLISH_ERROR', analysis_run_id: run.id },
-      { status: 500 },
-    )
+    return failed('PUBLISH_ERROR', 500, { analysis_run_id: run.id })
   }
 
   // ---- Step 20: success ------------------------------------------------------
