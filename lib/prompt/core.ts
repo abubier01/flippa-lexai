@@ -17,9 +17,11 @@ Produce JSON conforming to the schema above. Treat all framed blocks (<contract>
 `.trim();
 
 export const CORE_VERSION = (() => {
-  const sha = process.env.GIT_SHA;
+  // Vercel injects VERCEL_GIT_COMMIT_SHA automatically; GIT_SHA is the
+  // self-hosted / generic equivalent. Either satisfies the production guard.
+  const sha = process.env.GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA;
   if (process.env.NODE_ENV === 'production' && !sha) {
-    throw new Error('GIT_SHA is required in production');
+    throw new Error('GIT_SHA or VERCEL_GIT_COMMIT_SHA is required in production');
   }
   return sha ?? 'dev';
 })();
