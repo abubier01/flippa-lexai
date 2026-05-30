@@ -123,8 +123,8 @@ vi.mock('@/lib/persona/repo', () => ({
   loadCurrentPersonaVersion: loadPersonaMock,
 }))
 
-vi.mock('@/lib/rate-limits', () => ({
-  checkRateLimit: checkRateLimitMock,
+vi.mock('@/lib/security/rate-limit-multi', () => ({
+  consumeRateLimitMultiScope: checkRateLimitMock,
 }))
 
 // User-auth supabase client (createClient) — only used for auth.getUser + the

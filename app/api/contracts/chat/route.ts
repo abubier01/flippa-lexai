@@ -1,13 +1,12 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { createClient } from '@/lib/supabase/server'
 import { createGroq } from '@ai-sdk/groq'
 import { streamText } from 'ai'
-import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
-import { logger } from '@/lib/log/request'
+import { log } from '@/lib/log'
 import { getCurrentRunWithPersona } from '@/lib/contracts/read'
+import { requireUserContext, isAuthedContext } from '@/lib/api/auth-context'
 import {
   CHAT_CONTRACT_TEXT_MAX_CHARS,
   CHAT_HISTORY_MESSAGES,
@@ -23,7 +22,6 @@ const SAVE_FAILED_MESSAGE = 'Failed to save message — please retry.'
 
 export async function POST(req: NextRequest) {
   let userId: string | undefined
-  const rlog = logger(req, 'contracts.chat')
   try {
     const groqApiKey = process.env.GROQ_API_KEY?.trim()
     if (!groqApiKey) {
@@ -31,28 +29,15 @@ export async function POST(req: NextRequest) {
     }
     const groq = createGroq({ apiKey: groqApiKey })
 
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const ctx = await requireUserContext(req, { action: 'contracts.chat' })
+    if (!isAuthedContext(ctx)) return ctx
+    const { user, supabase, tier, log: ulog } = ctx
     userId = user.id
-    const ulog = rlog.child({ userId })
 
     const { contractId, message } = await req.json()
     if (!contractId || !message) {
       return NextResponse.json({ error: 'contractId and message are required' }, { status: 400 })
     }
-
-    // Fetch the user's plan first so we can gate on the rate-limit BEFORE
-    // firing the 4-way DB fan-out. Every other route (analyze, upload,
-    // contract-delete, account-delete) follows this pattern; chat was the
-    // outlier that wasted those queries on already-throttled requests.
-    let active: Awaited<ReturnType<typeof getActivePlan>> = { tier: 'solo', status: 'fallback' }
-    try {
-      active = await getActivePlan(user.id)
-    } catch (err) {
-      ulog.warn('chat.plan_lookup_failed_fallback_solo', { err })
-    }
-    const tier = active.tier ?? 'solo'
 
     const rl = await consumeRateLimit({
       action: 'chat',
@@ -243,7 +228,7 @@ Assistant:`
       // serializes Error instances, so a synthetic new Error(insertErr.message)
       // would drop those fields. Pass the original PostgrestError as-is and
       // surface .code at the top level so log-aggregation queries can filter.
-      rlog.error('chat.persist.pre_stream_failed', {
+      ulog.error('chat.persist.pre_stream_failed', {
         err: insertErr ?? new Error('no rows returned'),
         code: insertErr?.code,
         userId: user.id,
@@ -255,7 +240,7 @@ Assistant:`
 
     const placeholder = inserted.find(r => r.role === 'assistant')
     if (!placeholder) {
-      rlog.error('chat.persist.placeholder_missing', {
+      ulog.error('chat.persist.placeholder_missing', {
         err: new Error('placeholder row missing after insert'),
         userId: user.id,
         subsystem: 'supabase',
@@ -284,7 +269,7 @@ Assistant:`
             .select('id')
           if (updateErr) {
             // Same rationale as pre_stream_failed: preserve full PostgrestError.
-            rlog.error('chat.persist.update_failed', {
+            ulog.error('chat.persist.update_failed', {
               err: updateErr,
               code: updateErr.code,
               userId: user.id,
@@ -297,7 +282,7 @@ Assistant:`
           if (!updatedRows || updatedRows.length === 0) {
             // Tripwire for future RLS regressions on chat_messages.
             // Migration 012 added the UPDATE policy that prevents this.
-            rlog.error('chat.persist.zero_rows', {
+            ulog.error('chat.persist.zero_rows', {
               userId: user.id,
               placeholderId: placeholder.id,
               subsystem: 'supabase',
@@ -310,8 +295,9 @@ Assistant:`
     })
     return result.toTextStreamResponse()
   } catch (err) {
-    rlog.error('chat.failed', {
+    log.error('chat.failed', {
       err,
+      route: 'contracts.chat',
       subsystem: 'llm',
       provider: 'groq',
       op: 'chat',

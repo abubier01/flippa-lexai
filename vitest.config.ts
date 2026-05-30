@@ -8,6 +8,7 @@ export default defineConfig({
     passWithNoTests: false,
     include: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
     exclude: ['.claude/**', 'node_modules/**', '.worktrees/**', '**/*.int.test.ts'],
+    setupFiles: ['./__tests__/helpers/vitest-setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
@@ -42,7 +43,7 @@ export default defineConfig({
         // FLOOR threshold below before lifting the include list.
         'lib/prompt/**/*.ts',
         'lib/grounding.ts',
-        'lib/rate-limits.ts',
+        'lib/security/rate-limit-multi.ts',
         'lib/persona/**/*.ts',
         'lib/analysis/**/*.ts',
         'lib/contracts/read.ts',

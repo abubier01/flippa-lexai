@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
 import { ANALYZE_TRUNCATION_CHARS } from '@/lib/llm/limits'
-import { logger } from '@/lib/log/request'
 import { withQuotaClaim } from '@/lib/quota'
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_BYTES_LABEL } from '@/lib/constants/upload-limits'
+import { requireUserContext, isAuthedContext } from '@/lib/api/auth-context'
+import { log } from '@/lib/log'
 
 const MAX_TEXT_CHARS = 50_000              // ~50 KB raw text, ~12 pages of contract
 
@@ -24,23 +23,14 @@ async function extractTextFromDOCX(buffer: Buffer): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const rlog = logger(req, 'contracts.upload')
   let userId: string | undefined
 
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const ctx = await requireUserContext(req, { action: 'contracts.upload' })
+    if (!isAuthedContext(ctx)) return ctx
+    const { user, supabase, tier, log: ulog } = ctx
     userId = user.id
-    const ulog = rlog.child({ userId })
 
-    let active: Awaited<ReturnType<typeof getActivePlan>> = { tier: 'solo', status: 'fallback' }
-    try {
-      active = await getActivePlan(user.id)
-    } catch (err) {
-      ulog.warn('upload.plan_lookup_failed_fallback_solo', { err })
-    }
-    const tier = active.tier ?? 'solo'
     const rl = await consumeRateLimit({
       action: 'upload',
       userId: user.id,
@@ -243,7 +233,7 @@ export async function POST(req: NextRequest) {
       : {}
     return NextResponse.json({ id: out.id }, { headers })
   } catch (err) {
-    rlog.error('upload.failed', { err, ...(userId ? { userId } : {}) })
+    log.error('upload.failed', { err, route: 'contracts.upload', ...(userId ? { userId } : {}) })
     return NextResponse.json({ error: 'Failed to upload contract' }, { status: 500 })
   }
 }
