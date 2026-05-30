@@ -40,9 +40,9 @@ export default function TeamDashboard({
 
   const isOwner = team ? members.find(m => m.user_id === currentUserId)?.role === 'owner' : false
 
-  // Effective risk score from persisted contract value.
+  // Effective risk score is sourced only from analysis_runs.output.risk_score.
   function effectiveScore(c: SharedContract) {
-    return c.risk_score ?? 0
+    return c.run?.output?.risk_score ?? 0
   }
 
   async function createTeam() {
@@ -403,9 +403,11 @@ export default function TeamDashboard({
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{c.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {c.contract_analyses?.[0]?.summary
-                            ? c.contract_analyses[0].summary.slice(0, 80) + '...'
-                            : formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                          {c.run?.output?.summary
+                            ? c.run.output.summary.slice(0, 80) + '...'
+                            : c.run == null
+                              ? 'Not analyzed yet'
+                              : formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                         </p>
                       </div>
                     </div>

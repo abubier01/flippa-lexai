@@ -6,7 +6,7 @@ import TeamDashboard from '@/components/team/team-dashboard'
 import type { Member, Invite, SharedContract, Analytics, Team } from '@/components/team/types'
 import { hasTeamAccess } from '@/lib/plan/access'
 import { getServiceClient } from '@/lib/supabase/service-role'
-import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
+import { listTeamContractsWithRuns } from '@/lib/contracts/read'
 
 export default async function TeamPage() {
   // Use user auth client only for getUser() — all DB reads use service role to bypass RLS
@@ -54,16 +54,14 @@ export default async function TeamPage() {
   let teamAnalytics: Analytics | null = null
 
   if (effectiveTeamId) {
-    const [teamRes, membersRes, invitesRes, contractsRes] = await Promise.all([
+    const [teamRes, membersRes, invitesRes, contractsList] = await Promise.all([
       service.from('teams').select('*').eq('id', effectiveTeamId).returns<Team[]>().single(),
       service.from('team_members').select('*').eq('team_id', effectiveTeamId),
       service.from('team_invites').select('*').eq('team_id', effectiveTeamId).eq('status', 'pending').returns<Invite[]>(),
-      service.from('contracts')
-        .select('*, contract_analyses(risks, summary)')
-        .eq('team_id', effectiveTeamId)
-        .eq('shared_with_team', true)
-        .order('created_at', { ascending: false })
-        .returns<SharedContract[]>(),
+      // Bulk read: contracts joined with analysis_runs via current_run_id in
+      // one round-trip. Replaces the legacy contract_analyses fetch. See
+      // lib/contracts/read.ts::listTeamContractsWithRuns.
+      listTeamContractsWithRuns(effectiveTeamId, service),
     ])
 
     const rawMembers = (membersRes.data ?? []) as Array<{
@@ -87,25 +85,26 @@ export default async function TeamPage() {
       profiles: profileMap[m.user_id] ?? { id: m.user_id, full_name: null, plan: 'solo' },
     }))
     invites = invitesRes.data ?? []
-    sharedContracts = contractsRes.data ?? []
+    sharedContracts = contractsList
 
-    // Compute team analytics
-    const analyses = sharedContracts.flatMap(c => c.contract_analyses ?? [])
+    // Compute team analytics from analysis_runs.output. The structured output
+    // carries a per-run integer risk_score (0-100) computed at analysis time
+    // by the prompt compiler — no need to recompute from risks[].
     let totalRisk = 0, riskCount = 0
     let high = 0, medium = 0, low = 0
 
-    for (const a of analyses) {
-      const risks = a.risks ?? []
-      for (const r of risks) {
-        if (r.severity === 'high') high++
+    for (const c of sharedContracts) {
+      const output = c.run?.output
+      if (!output) continue
+      for (const r of output.risks) {
+        // The new schema includes a 'critical' severity; bucket it with high
+        // for the dashboard's 3-tier summary.
+        if (r.severity === 'high' || r.severity === 'critical') high++
         else if (r.severity === 'medium') medium++
         else low++
       }
-      if (risks.length > 0) {
-        const score = computeRiskScoreFromRisks(risks)
-        totalRisk += score
-        riskCount++
-      }
+      totalRisk += output.risk_score
+      riskCount++
     }
 
     teamAnalytics = {

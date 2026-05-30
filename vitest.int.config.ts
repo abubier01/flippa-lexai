@@ -10,6 +10,7 @@ export default defineConfig({
     pool: 'forks',
     fileParallelism: false,
     coverage: { enabled: false },
+    setupFiles: ['./__tests__/integration/helpers/setup-env.ts'],
   },
   resolve: {
     alias: { '@': path.resolve(__dirname, '.') },

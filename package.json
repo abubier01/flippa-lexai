@@ -50,6 +50,7 @@
     "@stripe/stripe-js": "^5.6.0",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.0",
+    "@types/diff": "^7.0.2",
     "@upstash/qstash": "^2.11.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
@@ -60,6 +61,7 @@
     "clsx": "^2.1.1",
     "cmdk": "1.1.1",
     "date-fns": "4.1.0",
+    "diff": "^9.0.0",
     "embla-carousel-react": "8.6.0",
     "input-otp": "1.4.2",
     "lucide-react": "^0.564.0",
@@ -76,10 +78,12 @@
     "recharts": "2.15.0",
     "server-only": "^0.0.1",
     "sonner": "^1.7.1",
+    "string-similarity": "^4.0.4",
     "stripe": "^17.7.0",
     "tailwind-merge": "^3.3.1",
     "vaul": "^1.1.2",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.25.2"
   },
   "overrides": {
     "@xmldom/xmldom": "^0.8.13",
@@ -92,6 +96,7 @@
     "@types/node": "^22",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@types/string-similarity": "^4.0.2",
     "@vitest/coverage-v8": "^4.1.7",
     "dotenv": "^17.4.2",
     "eslint": "^9.39.4",

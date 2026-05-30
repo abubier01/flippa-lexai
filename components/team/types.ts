@@ -1,3 +1,5 @@
+import type { TeamContractRow } from '@/lib/contracts/read'
+
 export interface Member {
   id: string
   user_id: string
@@ -15,15 +17,14 @@ export interface Invite {
   status: string
 }
 
-export interface SharedContract {
-  id: string
-  title: string
-  status: string
-  risk_score: number
-  created_at: string
-  user_id: string
-  contract_analyses: { risks: { severity: string }[]; summary?: string }[]
-}
+/**
+ * Shared contract row consumed by the team dashboard. Combines contract
+ * metadata with the current analysis_runs row (via contracts.current_run_id).
+ * `run.output` holds the structured AnalysisOutput — summary, risk_score,
+ * risks[], clauses[], suggestions[]. `run` is null when the contract has not
+ * been analyzed yet.
+ */
+export type SharedContract = TeamContractRow
 
 export interface Analytics {
   totalContracts: number

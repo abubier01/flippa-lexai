@@ -7,6 +7,7 @@ import { getActivePlan } from '@/lib/plan/access'
 import { PLAN_LIMITS } from '@/lib/plan-limits'
 import { consumeRateLimit, rateLimitHeaders } from '@/lib/security/rate-limit'
 import { logger } from '@/lib/log/request'
+import { getCurrentRunWithPersona } from '@/lib/contracts/read'
 import {
   CHAT_CONTRACT_TEXT_MAX_CHARS,
   CHAT_HISTORY_MESSAGES,
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     const [
       contractRes,
       messageCountRes,
-      analysisRes,
+      runRes,
       historyRes,
     ] = await Promise.all([
       supabase
@@ -88,19 +89,20 @@ export async function POST(req: NextRequest) {
         .eq('contract_id', contractId)
         .eq('role', 'assistant')
         .neq('content', ''),
-      supabase
-        .from('contract_analyses')
-        .select('*')
-        .eq('contract_id', contractId)
-        .single(),
+      // Consolidated read of analysis_runs joined with persona_versions.
+      // Returns null when contract has no current_run_id (analysis pending).
+      getCurrentRunWithPersona(contractId, supabase).catch(() => null),
       // Get recent history — user turns only to prevent poisoned assistant turns
-      // from being re-fed into subsequent requests.
+      // from being re-fed into subsequent requests. Order DESC + limit to fetch
+      // the MOST RECENT N messages, then reverse client-side to restore
+      // chronological order for the prompt builder. (ASC + limit would return
+      // the OLDEST N — useless for long threads.)
       supabase
         .from('chat_messages')
         .select('role, content')
         .eq('contract_id', contractId)
         .eq('role', 'user')
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
         .limit(CHAT_HISTORY_MESSAGES),
     ])
 
@@ -130,8 +132,38 @@ export async function POST(req: NextRequest) {
         plan,
       }, { status: 403 })
     }
-    const analysis = analysisRes.data
-    const history = historyRes.data
+    // analysis_runs.output is the canonical post-Tier-1 shape. Map the
+    // structured output to the legacy-compatible field set the prompt builder
+    // below consumes (summary / risks / clauses) — chat doesn't need persona
+    // grouping, just the prose context for the LLM.
+    const runWithPersona = runRes
+    const analysis = runWithPersona?.run.output
+      ? {
+          summary: runWithPersona.run.output.summary,
+          // No key_points in the new schema — suggestions are the closest analog.
+          key_points: runWithPersona.run.output.suggestions,
+          risks: runWithPersona.run.output.risks.map(r => ({
+            title: r.title,
+            severity: r.severity,
+            description: r.description,
+          })),
+          // Map clauses[] (keyed by key_clause_id) into a record keyed by
+          // persona label for the prompt rendering below.
+          clauses: Object.fromEntries(
+            runWithPersona.run.output.clauses
+              .filter(c => c.presence.status === 'present')
+              .map(c => {
+                const label =
+                  runWithPersona.persona.keyClauses.find(k => k.id === c.key_clause_id)?.label ??
+                  c.key_clause_id
+                const presence = c.presence as { status: 'present'; quoted_text: string; concern?: string }
+                return [label, presence.quoted_text + (presence.concern ? ` — ${presence.concern}` : '')]
+              }),
+          ),
+        }
+      : null
+    // Reverse the DESC-fetched history into chronological order for prompt assembly.
+    const history = historyRes.data ? [...historyRes.data].reverse() : null
 
     const requestId = randomUUID()
     const START = `<<<UNTRUSTED-CONTRACT-${requestId}-START>>>`
@@ -146,10 +178,18 @@ export async function POST(req: NextRequest) {
 
     const rawContractText = scrub((contract.raw_text || '').slice(0, CHAT_CONTRACT_TEXT_MAX_CHARS))
 
+    // Risk score: prefer the canonical value from the current analysis run's
+    // output. Only fall back to the contracts column when no run exists yet
+    // (legacy mid-migration rows; goes away once every contract has a run).
+    const riskScoreForPrompt =
+      runWithPersona?.run.output?.risk_score ?? contract.risk_score ?? null
+    const riskScoreLine =
+      riskScoreForPrompt !== null ? `Risk Score: ${riskScoreForPrompt}/100` : 'Risk Score: (not yet analyzed)'
+
     const contractContext = `
 Contract Title: ${scrub(contract.title)}
 File: ${scrub(contract.file_name)}
-Risk Score: ${contract.risk_score}/100
+${riskScoreLine}
 
 ${analysis ? `Summary: ${scrub(analysis.summary)}
 

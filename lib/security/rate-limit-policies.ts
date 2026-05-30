@@ -4,7 +4,18 @@ import type { PlanType } from '@/lib/plan-limits'
 // limits across all tiers. Tier-sized limits make sense for cost-control;
 // abuse defense is the same across plans.
 
-export type RateLimitAction = 'chat' | 'analyze' | 'upload' | 'contract-delete' | 'account-delete'
+export type RateLimitAction =
+  | 'chat'
+  | 'analyze'
+  | 'upload'
+  | 'contract-delete'
+  | 'account-delete'
+  // Tier 1 modular-analysis sliding-window scopes (spec § Rate Limiting).
+  // perUser / perTenant fail open (cost-control, match 'analyze'); perTenantDaily
+  // fails closed because the daily budget is the cost-protection ceiling.
+  | 'analyze:perUser'
+  | 'analyze:perTenant'
+  | 'analyze:perTenantDaily'
 
 export type Policy = {
   limit: number
@@ -19,6 +30,7 @@ export type Policy = {
 
 const MIN = 60_000
 const HOUR = 60 * MIN
+const DAY = 24 * HOUR
 
 export const POLICIES = {
   chat: {
@@ -45,6 +57,23 @@ export const POLICIES = {
     solo: { limit: 5, windowMs: 15 * MIN, failMode: 'closed' },
     pro:  { limit: 5, windowMs: 15 * MIN, failMode: 'closed' },
     team: { limit: 5, windowMs: 15 * MIN, failMode: 'closed' },
+  },
+  // Tier 1 modular-analysis limits — flat across tiers (spec § Rate Limiting
+  // defines a single set; per-tier tuning is a Tier 2 concern).
+  'analyze:perUser': {
+    solo: { limit: 10, windowMs: MIN },
+    pro:  { limit: 10, windowMs: MIN },
+    team: { limit: 10, windowMs: MIN },
+  },
+  'analyze:perTenant': {
+    solo: { limit: 60, windowMs: MIN },
+    pro:  { limit: 60, windowMs: MIN },
+    team: { limit: 60, windowMs: MIN },
+  },
+  'analyze:perTenantDaily': {
+    solo: { limit: 2000, windowMs: DAY, failMode: 'closed' },
+    pro:  { limit: 2000, windowMs: DAY, failMode: 'closed' },
+    team: { limit: 2000, windowMs: DAY, failMode: 'closed' },
   },
 } as const satisfies Record<RateLimitAction, Record<PlanType, Policy>>
 

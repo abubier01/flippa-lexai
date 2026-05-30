@@ -33,6 +33,51 @@ exports[`POLICIES > matches the documented starter values 1`] = `
       "windowMs": 3600000,
     },
   },
+  "analyze:perTenant": {
+    "pro": {
+      "limit": 60,
+      "windowMs": 60000,
+    },
+    "solo": {
+      "limit": 60,
+      "windowMs": 60000,
+    },
+    "team": {
+      "limit": 60,
+      "windowMs": 60000,
+    },
+  },
+  "analyze:perTenantDaily": {
+    "pro": {
+      "failMode": "closed",
+      "limit": 2000,
+      "windowMs": 86400000,
+    },
+    "solo": {
+      "failMode": "closed",
+      "limit": 2000,
+      "windowMs": 86400000,
+    },
+    "team": {
+      "failMode": "closed",
+      "limit": 2000,
+      "windowMs": 86400000,
+    },
+  },
+  "analyze:perUser": {
+    "pro": {
+      "limit": 10,
+      "windowMs": 60000,
+    },
+    "solo": {
+      "limit": 10,
+      "windowMs": 60000,
+    },
+    "team": {
+      "limit": 10,
+      "windowMs": 60000,
+    },
+  },
   "chat": {
     "pro": {
       "limit": 120,

@@ -1,0 +1,46 @@
+MASTER SERVICES AGREEMENT — Buyer Inc. / Vendor Corp.
+
+This Master Services Agreement ("Agreement") is entered into as of January 1, 2026 ("Effective Date") between Buyer Inc., a Delaware corporation ("Customer"), and Vendor Corp., a California corporation ("Vendor"). The parties agree as follows.
+
+§ 1. Services. Vendor shall provide the cloud software platform and related professional services described in one or more order forms executed by the parties (collectively, the "Services").
+
+§ 2. Term and Renewal.
+§ 2.1 Initial Term. The initial term of this Agreement shall commence on the Effective Date and continue for a period of twelve (12) months.
+§ 2.2 Renewal. Term auto-renews for successive 12-month periods unless either party provides written notice of non-renewal at least 90 days prior to the then-current renewal date. Renewal fees may increase by up to ten percent (10%) per renewal cycle at Vendor's discretion.
+
+§ 3. Termination.
+§ 3.1 For Convenience. Customer may terminate this Agreement for convenience upon one hundred eighty (180) days prior written notice to Vendor, provided that no refund of prepaid fees shall be issued.
+§ 3.2 For Cause. Either party may terminate for material breach upon thirty (30) days written notice if such breach remains uncured.
+
+§ 4. Fees and Payment.
+§ 4.1 Annual Prepayment. All annual fees due in advance within thirty days of contract execution and on each renewal anniversary thereafter. Customer shall not be entitled to any refund, credit, or offset of prepaid fees under any circumstances, including termination.
+§ 4.2 Late Fees. Past-due amounts accrue interest at one and one-half percent (1.5%) per month or the maximum rate permitted by law, whichever is less.
+
+§ 5. Service Levels. Vendor will use commercially reasonable efforts to maintain platform availability. No specific uptime percentage, response time, or service credit is guaranteed under this Agreement.
+
+§ 6. Confidentiality. Each party agrees to protect the other party's Confidential Information using the same degree of care it uses to protect its own confidential information of like importance, and in no event less than a reasonable degree of care, for a period of three (3) years following disclosure.
+
+§ 7. Data and Intellectual Property.
+§ 7.1 Customer Data. Customer retains ownership of all data submitted to the Services ("Customer Data"). Vendor is granted a worldwide, royalty-free license to use Customer Data to operate, maintain, and improve the Services, including to train and refine Vendor's machine learning models.
+§ 7.2 Vendor IP. Vendor retains all right, title, and interest in and to the Services and all underlying technology.
+
+§ 8. Confidential Information of Customer. Customer Confidential Information includes pricing terms of this Agreement, which Customer shall not disclose to third parties without Vendor's prior written consent.
+
+§ 9. Representations and Warranties. Each party represents that it has full power and authority to enter into this Agreement. THE SERVICES ARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+
+§ 10. Indemnification. Customer shall defend, indemnify, and hold harmless Vendor from any third-party claims arising from Customer's use of the Services or breach of this Agreement. Vendor provides no reciprocal indemnification obligation under this Agreement.
+
+§ 11. Limitation of Liability.
+§ 11.1 Cap. Vendor's aggregate liability shall not exceed the fees paid by Customer in the six months preceding the claim. This cap applies to all causes of action, whether in contract, tort, or otherwise.
+§ 11.2 Exclusions. IN NO EVENT SHALL VENDOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, OR PUNITIVE DAMAGES, INCLUDING LOST PROFITS OR LOST DATA.
+
+§ 12. Governing Law and Venue. This Agreement shall be governed by and construed in accordance with the laws of the State of California, without regard to its conflict-of-laws principles. Any disputes shall be resolved exclusively in the state or federal courts located in San Francisco County, California.
+
+§ 13. Miscellaneous. This Agreement, together with any order forms, constitutes the entire agreement between the parties and supersedes all prior agreements. No modification shall be effective unless in writing and signed by both parties.
+
+IN WITNESS WHEREOF, the parties have executed this Agreement as of the Effective Date.
+
+BUYER INC.                              VENDOR CORP.
+By: ____________________                By: ____________________
+Name: __________________                Name: __________________
+Title: _________________                Title: _________________
