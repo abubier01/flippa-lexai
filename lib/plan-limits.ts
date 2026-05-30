@@ -58,7 +58,11 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
 
 export function normalizePlanType(plan: string | null | undefined): PlanType {
   const normalized = (plan || 'solo').toLowerCase()
-  if (normalized === 'free' || normalized === 'solo') return 'solo'
+  // Legacy alias: pre-2025 rows carried plan='free'; backfilled to 'solo' by
+  // scripts/011_backfill_profile_plan_free_to_solo.sql. Mapping retained as a
+  // defense-in-depth shim against any stale cached value that might surface.
+  // Remove once we confirm zero 'free' values for ≥1 release post-backfill.
+  if (normalized === 'solo' || normalized === 'free') return 'solo'
   if (normalized === 'pro' || normalized === 'team') return normalized
   return 'solo'
 }
