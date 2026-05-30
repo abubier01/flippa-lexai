@@ -4,6 +4,7 @@ import { getStripe } from '@/lib/stripe'
 import { priceIdToPlan } from '@/lib/stripe/price-to-plan'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { log } from '@/lib/log'
+import { invalidatePlanCache } from '@/lib/plan/access'
 
 export async function handleCheckoutSessionCompleted(
   event: Stripe.CheckoutSessionCompletedEvent,
@@ -54,6 +55,10 @@ export async function handleCheckoutSessionCompleted(
       .update({ plan, stripe_customer_id: customerId })
       .eq('id', userId)
     if (profileError) throw new Error(`profiles update failed: ${profileError.message}`)
+
+    // Bust the in-process plan cache so the next API request reflects this
+    // mutation immediately (cache TTL backstop ≤60s; webhook is primary signal).
+    invalidatePlanCache(userId)
 
     return { userId }
   } catch (err) {

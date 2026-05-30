@@ -59,6 +59,7 @@ vi.mock('@/lib/stripe', () => ({
 // startCheckoutSession throws if getActivePlan returns active/trialing.
 vi.mock('@/lib/plan/access', () => ({
   getActivePlan: vi.fn().mockResolvedValue({ tier: 'solo', status: null }),
+  invalidatePlanCache: vi.fn(),
 }))
 
 // ── getOrCreateStripeCustomer — cleaner than wiring the full chain ───────────

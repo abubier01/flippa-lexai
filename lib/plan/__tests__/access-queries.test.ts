@@ -10,11 +10,13 @@ vi.mock('@/lib/supabase/service-role', () => ({
   getServiceClient: vi.fn().mockImplementation(() => supabaseMock.client),
 }))
 
-import { getActivePlan, hasTeamAccess } from '../access'
+import { getActivePlan, hasTeamAccess, __resetPlanCacheForTest } from '../access'
 
 function activeSubRow(plan: string, status = 'active') {
   return { status, plan, current_period_end: new Date(Date.now() + 86_400_000).toISOString() }
 }
+
+beforeEach(() => __resetPlanCacheForTest())
 
 describe('getActivePlan', () => {
   it('no subscription row → tier null + status "none"', async () => {

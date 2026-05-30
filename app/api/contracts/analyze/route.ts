@@ -48,6 +48,7 @@ import {
 } from '@/lib/analysis/repo'
 import { callStructured, ModelCallError, SchemaGenerationError } from '@/lib/llm/structured'
 import { verifyGrounding } from '@/lib/grounding'
+import { getActivePlan } from '@/lib/plan/access'
 
 const PERSONA_ID = 'procurement'
 
@@ -82,17 +83,21 @@ export async function POST(req: NextRequest) {
 
   const service = getServiceClient()
 
-  // Resolve tenantId + tier from the user's profile. Solo plan → tenantId = userId.
+  // tenantId comes from the user's profile; tier resolves through getActivePlan
+  // (which now caches per-userId, so this is cheap on hot paths).
   const { data: profile } = await service
     .from('profiles')
-    .select('team_id, plan')
+    .select('team_id')
     .eq('id', userId)
     .maybeSingle()
   const tenantId = (profile?.team_id as string | null | undefined) ?? userId
-  const tier = ((profile?.plan as string | undefined) ?? 'solo') as
-    | 'solo'
-    | 'team'
-    | 'pro'
+  let tier: 'solo' | 'team' | 'pro' = 'solo'
+  try {
+    const active = await getActivePlan(userId)
+    tier = (active.tier ?? 'solo') as 'solo' | 'team' | 'pro'
+  } catch (err) {
+    ulog.warn('analyze.plan_lookup_failed_fallback_solo', { err })
+  }
 
   // ---- Step 3: rate limit ----------------------------------------------------
   const rl = await consumeRateLimitMultiScope({ userId, tenantId, tier })

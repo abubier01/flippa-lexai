@@ -2,6 +2,7 @@ import 'server-only'
 import type Stripe from 'stripe'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { log } from '@/lib/log'
+import { invalidatePlanCache } from '@/lib/plan/access'
 
 export async function handleInvoicePaymentSucceeded(
   event: Stripe.InvoicePaymentSucceededEvent,
@@ -34,6 +35,7 @@ export async function handleInvoicePaymentSucceeded(
       .eq('id', subId)
     if (error) throw new Error(`subscriptions renewal update failed: ${error.message}`)
 
+    if (sub?.user_id) invalidatePlanCache(sub.user_id)
     return { userId: sub?.user_id ?? null }
   } catch (err) {
     log.error('stripe.invoice-payment-succeeded.failed', {

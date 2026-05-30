@@ -3,6 +3,7 @@ import type Stripe from 'stripe'
 import { priceIdToPlan } from '@/lib/stripe/price-to-plan'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { log } from '@/lib/log'
+import { invalidatePlanCache } from '@/lib/plan/access'
 
 // Handles customer.subscription.created and customer.subscription.updated.
 // The two events carry the same shape; we treat created as a backstop in case
@@ -56,6 +57,7 @@ export async function handleSubscriptionUpserted(
       .eq('id', userId)
     if (profileError) throw new Error(`profiles update failed: ${profileError.message}`)
 
+    invalidatePlanCache(userId)
     return { userId }
   } catch (err) {
     // Tag failure with the actual Stripe event type so Sentry can distinguish

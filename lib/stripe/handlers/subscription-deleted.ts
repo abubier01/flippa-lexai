@@ -2,6 +2,7 @@ import 'server-only'
 import type Stripe from 'stripe'
 import { getServiceClient } from '@/lib/supabase/service-role'
 import { log } from '@/lib/log'
+import { invalidatePlanCache } from '@/lib/plan/access'
 
 export async function handleSubscriptionDeleted(
   event: Stripe.CustomerSubscriptionDeletedEvent,
@@ -39,6 +40,7 @@ export async function handleSubscriptionDeleted(
       .eq('id', userId)
     if (profileError) throw new Error(`profiles downgrade failed: ${profileError.message}`)
 
+    invalidatePlanCache(userId)
     return { userId }
   } catch (err) {
     log.error('stripe.subscription-deleted.failed', {
