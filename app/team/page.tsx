@@ -16,15 +16,19 @@ export default async function TeamPage() {
 
   const service = getServiceClient()
 
-  const { data: profile } = await service
-    .from('profiles')
-    .select('plan, team_id, full_name')
-    .eq('id', user.id)
-    .single()
-
-  // Check team access via subscription + membership (team members have plan='solo'
-  // but should still see the team page when the team owner has an active team plan).
-  const access = await hasTeamAccess(user.id)
+  // Parallelize: profile (display + fallback team_id) is independent of
+  // hasTeamAccess (subscriptions + team_members reads). Previously sequential.
+  const [profileRes, access] = await Promise.all([
+    service
+      .from('profiles')
+      .select('plan, team_id, full_name')
+      .eq('id', user.id)
+      .single(),
+    // Check team access via subscription + membership (team members have plan='solo'
+    // but should still see the team page when the team owner has an active team plan).
+    hasTeamAccess(user.id),
+  ])
+  const profile = profileRes.data
   if (!access.ok) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
