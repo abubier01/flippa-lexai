@@ -20,6 +20,10 @@
 -- Refs: spec § Part 1 Data Model + § Part 5 Migration story + plan P2.1–P2.4.
 
 \set ON_ERROR_STOP on
+\if :{?bootstrap_admin_uuid}
+\else
+\set bootstrap_admin_uuid 8a652f73-1f2d-407b-bf18-32a3ddd1b979
+\endif
 
 -- ============================================================================
 -- Transaction 1 — schema + seed
@@ -59,28 +63,34 @@ BEGIN
 END;
 $$;
 
+-- Sanity FIRST: bootstrap admin row must exist in auth.users. Check before any
+-- profiles insert so failures are explicit (instead of FK violations).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM auth.users WHERE id = :'bootstrap_admin_uuid'
+  ) THEN
+    RAISE EXCEPTION 'Bootstrap admin UUID % is not in auth.users — pass -v bootstrap_admin_uuid=<uuid> or provision this admin first', :'bootstrap_admin_uuid';
+  END IF;
+END$$;
+
 -- Ensure a profiles row exists for the bootstrap admin. The Supabase Auth
 -- trigger normally creates it, but if the admin auth.users row predates the
 -- trigger (or the trigger ever failed), insert defensively.
 INSERT INTO public.profiles (id)
-VALUES ('8a652f73-1f2d-407b-bf18-32a3ddd1b979')
+VALUES (:'bootstrap_admin_uuid')
 ON CONFLICT (id) DO NOTHING;
 
 UPDATE public.profiles
    SET is_platform_admin = true
- WHERE id = '8a652f73-1f2d-407b-bf18-32a3ddd1b979';
+ WHERE id = :'bootstrap_admin_uuid';
 
--- Sanity: bootstrap admin row must exist in auth.users AND be flagged in profiles.
+-- Sanity: bootstrap admin profile must now be flagged.
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM auth.users WHERE id = '8a652f73-1f2d-407b-bf18-32a3ddd1b979'
-  ) THEN
-    RAISE EXCEPTION 'Bootstrap admin UUID 8a652f73-... is not in auth.users — wrong env or wrong UUID';
-  END IF;
-  IF NOT EXISTS (
     SELECT 1 FROM public.profiles
-     WHERE id = '8a652f73-1f2d-407b-bf18-32a3ddd1b979'
+     WHERE id = :'bootstrap_admin_uuid'
        AND is_platform_admin = true
   ) THEN
     RAISE EXCEPTION 'Bootstrap admin profile is missing or not flagged is_platform_admin';
@@ -156,7 +166,7 @@ INSERT INTO persona_versions (
   $jsonb${"id":"procurement","description":"You are a buyer-side procurement counsel. Analyze contracts from the buyer's perspective.\nSurface terms that disadvantage the buyer and lead the summary with the strongest\nnegotiation leverage points.\n\nCITATION REQUIREMENTS (strict, enforced by schema and post-validation):\n\n- Every risk you report MUST include either:\n  (a) evidence.type = \"quoted\" with clause_reference and a verbatim quoted_text\n      pulled directly from the contract — at least 20 characters, copied exactly\n      (not paraphrased, not summarized); OR\n  (b) evidence.type = \"absence\" with a missing_concept describing what is not\n      present (only when the risk is about a missing protection, not a stated term).\n\n- Every key clause you report MUST be either:\n  (a) presence.status = \"present\" with quoted_text copied verbatim from the\n      contract — at least 20 characters; OR\n  (b) presence.status = \"absent\" with no quoted_text — clause is not in the contract.\n\n- Do NOT paraphrase, infer, or fabricate quotes. The system verifies every\n  quoted_text appears in the contract. If your quote is not verifiable, the\n  entire analysis is rejected. When in doubt, mark as absent or absence-based.\n\nrisk_score scale (anchored — use these bands, do not invent new ones):\n  0–20   Boilerplate-safe. Standard mutual terms, no material buyer disadvantage.\n  21–50  Minor concerns. Imperfect but acceptable with awareness.\n  51–80  Material buyer risks. Should be negotiated before signature.\n  81–100 Deal-breakers. Requires legal escalation or walk-away.","keyClauses":[{"id":"termination","label":"Termination","hint":"For convenience, for cause, notice periods, wind-down."},{"id":"auto_renewal","label":"Auto-Renewal","hint":"Opt-out windows, notice mechanics, price escalation on renewal."},{"id":"liability_cap","label":"Limitation of Liability","hint":null},{"id":"indemnification","label":"Indemnification","hint":"Mutuality, carve-outs, defense vs. indemnify, IP indemnity."},{"id":"data_and_ip","label":"Data & IP Rights","hint":"Ownership of buyer data, derived works, model-training rights."},{"id":"payment_terms","label":"Payment Terms","hint":"Front-loaded commitments, true-up mechanics, late fees."},{"id":"sla","label":"Service Levels","hint":null},{"id":"confidentiality","label":"Confidentiality","hint":null},{"id":"governing_law","label":"Governing Law & Venue","hint":null}],"riskAreas":[{"id":"unfavorable_termination","label":"Unfavorable Termination Terms","hint":null},{"id":"auto_renewal_trap","label":"Auto-Renewal Trap","hint":"Short opt-out windows, hard-to-discover renewal."},{"id":"vendor_favorable_liability","label":"Vendor-Favorable Liability Cap","hint":null},{"id":"indemnification_gap","label":"Indemnification Gap","hint":"Asymmetric protection, narrow IP indemnity."},{"id":"data_ownership_erosion","label":"Buyer Data/IP Ownership Erosion","hint":null},{"id":"frontloaded_payment","label":"Front-Loaded Buyer Commitment","hint":null},{"id":"weak_sla","label":"Weak or Unenforceable SLA","hint":null},{"id":"jurisdiction_risk","label":"Unfavorable Jurisdiction or Venue","hint":null}]}$jsonb$::jsonb,
   'b68d55f51d2fff927fed2cf24db995bdc4868b9d647f3bfa365762064725cf03',
   'Initial migration from lib/prompt/persona-procurement.ts',
-  '8a652f73-1f2d-407b-bf18-32a3ddd1b979', now(), '8a652f73-1f2d-407b-bf18-32a3ddd1b979'
+  :'bootstrap_admin_uuid', now(), :'bootstrap_admin_uuid'
 );
 
 -- Wire current_version_id on the persona row.
@@ -294,6 +304,11 @@ BEGIN
        AND confrelid::regclass::text = 'contract_analyses'
     UNION ALL
     SELECT 1 FROM pg_proc WHERE prosrc ILIKE '%contract_analyses%'
+      AND proname NOT IN (
+        'get_user_risk_distribution',
+        'get_user_contract_risk_scores',
+        'get_user_contract_score_summary'
+      )
     UNION ALL
     SELECT 1 FROM pg_trigger
      WHERE tgrelid::regclass::text = 'contract_analyses'
@@ -304,6 +319,12 @@ BEGIN
     RAISE EXCEPTION 'contract_analyses still has % dependencies — run scripts/_checks/contract_analyses_deps.sql for details', dep_count;
   END IF;
 END$$;
+
+-- Transitional dependency cleanup: these 3 RPCs are recreated by 018 to read
+-- analysis_runs instead of contract_analyses.
+DROP FUNCTION IF EXISTS public.get_user_risk_distribution();
+DROP FUNCTION IF EXISTS public.get_user_contract_risk_scores();
+DROP FUNCTION IF EXISTS public.get_user_contract_score_summary();
 
 -- intentionally NOT CASCADE — if any dependency slipped past the assertion,
 -- the drop fails safely instead of silently destroying a dependent object.

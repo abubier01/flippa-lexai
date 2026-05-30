@@ -49,6 +49,31 @@ jobs:
       - name: Resolve DATABASE_URL
         run: echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres" >> $GITHUB_ENV
 
+      - name: Seed bootstrap admin auth user for migration 016
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            INSERT INTO auth.users (
+              id,
+              aud,
+              role,
+              email,
+              raw_app_meta_data,
+              raw_user_meta_data,
+              created_at,
+              updated_at
+            ) VALUES (
+              '8a652f73-1f2d-407b-bf18-32a3ddd1b979',
+              'authenticated',
+              'authenticated',
+              'alex.bubier@gmail.com',
+              '{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,
+              '{}'::jsonb,
+              now(),
+              now()
+            )
+            ON CONFLICT (id) DO NOTHING;
+          "
+
       - name: Apply SQL migrations 001..019 in order
         run: |
           for f in $(ls scripts/[0-9][0-9][0-9]_*.sql | grep -v '\.down\.sql$' | sort); do
@@ -134,6 +159,31 @@ jobs:
 
       - name: Resolve DATABASE_URL
         run: echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres" >> $GITHUB_ENV
+
+      - name: Seed bootstrap admin auth user for migration 016
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            INSERT INTO auth.users (
+              id,
+              aud,
+              role,
+              email,
+              raw_app_meta_data,
+              raw_user_meta_data,
+              created_at,
+              updated_at
+            ) VALUES (
+              '8a652f73-1f2d-407b-bf18-32a3ddd1b979',
+              'authenticated',
+              'authenticated',
+              'alex.bubier@gmail.com',
+              '{\"provider\":\"email\",\"providers\":[\"email\"]}'::jsonb,
+              '{}'::jsonb,
+              now(),
+              now()
+            )
+            ON CONFLICT (id) DO NOTHING;
+          "
 
       - name: Apply SQL migrations 001..019 in order
         run: |
