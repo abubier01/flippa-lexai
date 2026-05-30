@@ -11,7 +11,6 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import RiskBadge from '@/components/contracts/risk-badge'
-import { computeRiskScoreFromRisks } from '@/lib/risk-scoring'
 import { MAX_TEAM_MEMBERS } from '@/lib/plan-limits'
 import type { Member, Invite, SharedContract, Analytics, Team } from './types'
 
@@ -41,15 +40,8 @@ export default function TeamDashboard({
 
   const isOwner = team ? members.find(m => m.user_id === currentUserId)?.role === 'owner' : false
 
-  // Effective risk score from analyses
+  // Effective risk score from persisted contract value.
   function effectiveScore(c: SharedContract) {
-    const analyses = c.contract_analyses || []
-    for (const a of analyses) {
-      const risks = a.risks || []
-      if (risks.length > 0) {
-        return computeRiskScoreFromRisks(risks)
-      }
-    }
     return c.risk_score ?? 0
   }
 
