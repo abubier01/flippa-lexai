@@ -2,8 +2,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 
-import { checkRateLimit } from '../rate-limits'
+import { consumeRateLimitMultiScope } from '../security/rate-limit-multi'
 import { peekRateLimit, consumeRateLimit } from '../security/rate-limit'
+
+const checkRateLimit = (userId: string, tenantId: string, tier: 'solo' | 'pro' | 'team') =>
+  consumeRateLimitMultiScope({ userId, tenantId, tier })
 
 const HAS_UPSTASH =
   typeof process.env.KV_REST_API_URL === 'string' &&

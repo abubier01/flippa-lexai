@@ -31,7 +31,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getServiceClient } from '@/lib/supabase/service-role-core'
 import { logger } from '@/lib/log/request'
 import { logRejection } from '@/lib/log/rejection'
-import { checkRateLimit } from '@/lib/rate-limits'
+import { consumeRateLimitMultiScope } from '@/lib/security/rate-limit-multi'
 import { validateAndScrub, UserContextError } from '@/lib/prompt/user-context'
 import { compile } from '@/lib/prompt/compile'
 import { buildOutputSchema } from '@/lib/prompt/output-schema'
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     | 'pro'
 
   // ---- Step 3: rate limit ----------------------------------------------------
-  const rl = await checkRateLimit(userId, tenantId, tier)
+  const rl = await consumeRateLimitMultiScope({ userId, tenantId, tier })
   if (!rl.allowed) {
     logRejection(ulog, {
       code: 'RATE_LIMITED',

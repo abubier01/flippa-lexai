@@ -14,7 +14,10 @@ vi.mock('../security/rate-limit', () => ({
   releaseRateLimit: releaseRateLimitMock,
 }))
 
-import { checkRateLimit } from '../rate-limits'
+import { consumeRateLimitMultiScope } from '../security/rate-limit-multi'
+
+const checkRateLimit = (userId: string, tenantId: string, tier: 'solo' | 'pro' | 'team') =>
+  consumeRateLimitMultiScope({ userId, tenantId, tier })
 
 describe('checkRateLimit rollback on partial consume failures', () => {
   beforeEach(() => {
