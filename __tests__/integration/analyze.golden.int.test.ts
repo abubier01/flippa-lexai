@@ -184,12 +184,15 @@ describe('golden contract fixture — spec test #24', () => {
     const diagnostics = (run.diagnostics as Array<{ code: string }>) ?? []
     expect(diagnostics.find((d) => d.code === 'GROUNDING_FAIL')).toBeUndefined()
 
-    // contracts.current_run_id points at the new run.
+    // contracts.{current_run_id, status, risk_score} synced on success
+    // (codex CRITICAL fix #2 — lifecycle sync).
     const { data: contract } = await svc
       .from('contracts')
-      .select('current_run_id')
+      .select('current_run_id, status, risk_score')
       .eq('id', contractId)
       .single()
     expect(contract!.current_run_id).toBe(run.id)
+    expect(contract!.status).toBe('completed')
+    expect(contract!.risk_score).toBe((EXPECTED_OUTPUT as { risk_score: number }).risk_score)
   })
 })

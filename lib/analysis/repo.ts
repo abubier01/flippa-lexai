@@ -81,24 +81,21 @@ export async function failRun(
   id: string,
   diagnostic: Diagnostic,
 ): Promise<void> {
-  // Read-then-write append. analysis_runs is server-write-only and contention
-  // on a single failed run is effectively nil — no need for a Postgres-side
-  // jsonb_set helper here.
-  const { data: row, error: readErr } = await client
-    .from('analysis_runs')
-    .select('diagnostics')
-    .eq('id', id)
-    .single()
-  if (readErr || !row) {
-    throw new AnalysisRepoError('not_found', `analysis_run ${id} not found`, readErr)
+  // Delegates to fail_analysis_run RPC (scripts/021) for atomicity — the RPC
+  // appends to analysis_runs.diagnostics, sets analysis_runs.status='failed',
+  // AND mirrors contracts.status='failed' in a single transaction. This keeps
+  // contracts.status in sync with run lifecycle (codex CRITICAL fix #2).
+  const { error } = await client.rpc('fail_analysis_run', {
+    p_run_id: id,
+    p_diagnostic: diagnostic as unknown as Record<string, unknown>,
+  })
+  if (error) {
+    // P0002 from the RPC indicates the run was not found.
+    if ((error as { code?: string }).code === 'P0002') {
+      throw new AnalysisRepoError('not_found', `analysis_run ${id} not found`, error)
+    }
+    throw new AnalysisRepoError('db_error', error.message, error)
   }
-  const existing = Array.isArray(row.diagnostics) ? (row.diagnostics as Diagnostic[]) : []
-  const next = [...existing, diagnostic]
-  const { error } = await client
-    .from('analysis_runs')
-    .update({ diagnostics: next, status: 'failed', completed_at: new Date().toISOString() })
-    .eq('id', id)
-  if (error) throw new AnalysisRepoError('db_error', error.message, error)
 }
 
 export async function promoteToCurrent(
