@@ -44,6 +44,12 @@ BEGIN
     RAISE EXCEPTION 'analysis_run % not found', p_run_id USING ERRCODE = 'P0002';
   END IF;
 
+  -- Serialize promotes per-contract to avoid pointer/update races under
+  -- concurrent publish attempts.
+  PERFORM pg_advisory_xact_lock(
+    ('x' || substr(replace(v_contract_id::text, '-', ''), 1, 16))::bit(64)::bigint
+  );
+
   -- Coerce risk_score safely; if absent/non-numeric, store NULL rather than
   -- raising — the run itself is still valid output.
   BEGIN

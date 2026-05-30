@@ -36,6 +36,29 @@ BEGIN;
 ALTER TABLE public.profiles
   ADD COLUMN is_platform_admin boolean NOT NULL DEFAULT false;
 
+-- Extend the existing profile-column guard in the same migration so
+-- is_platform_admin is never user-writable, even if later migrations are
+-- skipped. Trigger is created in 005 and picks up this function body.
+CREATE OR REPLACE FUNCTION public.guard_profile_billing_columns()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF current_user IN ('service_role', 'postgres', 'supabase_admin', 'supabase_auth_admin') THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.plan IS DISTINCT FROM OLD.plan THEN
+    RAISE EXCEPTION 'profiles.plan is not user-writable';
+  END IF;
+  IF NEW.stripe_customer_id IS DISTINCT FROM OLD.stripe_customer_id THEN
+    RAISE EXCEPTION 'profiles.stripe_customer_id is not user-writable';
+  END IF;
+  IF NEW.is_platform_admin IS DISTINCT FROM OLD.is_platform_admin THEN
+    RAISE EXCEPTION 'profiles.is_platform_admin is not user-writable';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 -- Ensure a profiles row exists for the bootstrap admin. The Supabase Auth
 -- trigger normally creates it, but if the admin auth.users row predates the
 -- trigger (or the trigger ever failed), insert defensively.
@@ -181,6 +204,18 @@ CREATE TABLE analysis_runs (
 CREATE UNIQUE INDEX analysis_runs_one_current_per_contract
   ON analysis_runs (contract_id) WHERE is_current;
 
+-- Hard invariant: only one in-flight run may exist per contract.
+CREATE UNIQUE INDEX analysis_runs_one_running_per_contract
+  ON analysis_runs (contract_id) WHERE status = 'running';
+
+-- Belt-and-suspenders JSONB shape checks for direct-SQL writes.
+ALTER TABLE analysis_runs
+  ADD CONSTRAINT analysis_runs_output_diagnostics_shape
+  CHECK (
+    jsonb_typeof(output) IN ('object', 'null')
+    AND jsonb_typeof(diagnostics) = 'array'
+  );
+
 -- ---------------------------------------------------------------------------
 -- (h) contracts.current_run_id — read pointer for the UI's "latest" query.
 -- ---------------------------------------------------------------------------
@@ -220,8 +255,17 @@ CREATE POLICY persona_versions_admin_all ON persona_versions
 CREATE POLICY persona_versions_select_via_run ON persona_versions
   FOR SELECT USING (
     EXISTS (
-      SELECT 1 FROM analysis_runs ar
+      SELECT 1
+        FROM analysis_runs ar
+        JOIN contracts c ON c.id = ar.contract_id
        WHERE ar.persona_version_id = persona_versions.id
+         AND (
+           c.user_id = auth.uid()
+           OR (
+             c.shared_with_team = true
+             AND (SELECT public.is_team_member(c.team_id))
+           )
+         )
     )
   );
 

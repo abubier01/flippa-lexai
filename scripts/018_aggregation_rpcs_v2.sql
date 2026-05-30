@@ -45,10 +45,11 @@ CREATE OR REPLACE FUNCTION public.get_user_risk_distribution()
 RETURNS TABLE(severity TEXT, count BIGINT)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
   SELECT
-    CASE lower(r->>'severity')
-      WHEN 'high'     THEN 'high'
-      WHEN 'critical' THEN 'high'   -- v2 introduces 'critical'; bucket → 'high'
-      WHEN 'medium'   THEN 'medium'
+    CASE
+      WHEN r->>'severity' IS NULL THEN 'low'
+      WHEN lower(r->>'severity') = 'high'     THEN 'high'
+      WHEN lower(r->>'severity') = 'critical' THEN 'high'   -- v2 introduces 'critical'; bucket → 'high'
+      WHEN lower(r->>'severity') = 'medium'   THEN 'medium'
       ELSE 'low'
     END AS severity,
     COUNT(*)::BIGINT AS count

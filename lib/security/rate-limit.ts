@@ -39,6 +39,7 @@ export type RateLimitResult = {
   resetAt: number
   retryAfterSeconds: number
   degraded?: boolean // set to true on Upstash fail-open path
+  committed?: boolean
 }
 
 function resolvePolicy(action: RateLimitAction, tier: PlanType): Policy {
@@ -85,6 +86,7 @@ function consumeInMemory(
       remaining: policy.limit - 1,
       resetAt,
       retryAfterSeconds: 0,
+      committed: true,
     }
   }
 
@@ -95,6 +97,7 @@ function consumeInMemory(
       remaining: 0,
       resetAt: bucket.resetAt,
       retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
+      committed: false,
     }
   }
 
@@ -105,6 +108,7 @@ function consumeInMemory(
     remaining: policy.limit - bucket.count,
     resetAt: bucket.resetAt,
     retryAfterSeconds: 0,
+    committed: true,
   }
 }
 
@@ -117,10 +121,14 @@ type UpstashLimitResult = {
   limit: number
   remaining: number
   reset: number
+  reason?: string
 }
 
 type LimiterInstance = {
-  limit: (key: string) => Promise<UpstashLimitResult>
+  limit: (
+    key: string,
+    req?: { rate?: number; ip?: string; userAgent?: string; country?: string },
+  ) => Promise<UpstashLimitResult>
   // Non-mutating "would this be allowed?" check used by peekRateLimit. Returns
   // the same shape minus `success` since peek doesn't change bucket state.
   getRemaining: (key: string) => Promise<{ remaining: number; reset: number }>
@@ -170,6 +178,7 @@ async function consumeUpstash(
   try {
     const limiter = await getLimiter(action, tier, policy)
     const result = await limiter.limit(buildKey(action, userId))
+    const timedOut = result.reason === 'timeout'
     return {
       allowed: result.success,
       limit: result.limit,
@@ -178,6 +187,8 @@ async function consumeUpstash(
       retryAfterSeconds: result.success
         ? 0
         : Math.max(1, Math.ceil((result.reset - now) / 1000)),
+      degraded: timedOut ? true : undefined,
+      committed: timedOut ? false : result.success,
     }
   } catch (err) {
     const e = err instanceof Error ? err : new Error(String(err))
@@ -201,6 +212,7 @@ async function consumeUpstash(
         resetAt,
         retryAfterSeconds: Math.max(1, Math.ceil(policy.windowMs / 1000)),
         degraded: true,
+        committed: false,
       }
     }
     return {
@@ -210,6 +222,7 @@ async function consumeUpstash(
       resetAt: now + policy.windowMs,
       retryAfterSeconds: 0,
       degraded: true,
+      committed: false,
     }
   }
 }
@@ -245,6 +258,18 @@ function peekInMemory(
     retryAfterSeconds:
       remaining > 0 ? 0 : Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
   }
+}
+
+function resetInMemory(action: RateLimitAction, userId: string, now: number): void {
+  const store = getStore()
+  const key = buildKey(action, userId)
+  const bucket = store.get(key)
+  if (!bucket || bucket.resetAt <= now) return
+  if (bucket.count <= 1) {
+    store.delete(key)
+    return
+  }
+  bucket.count -= 1
 }
 
 async function peekUpstash(
@@ -361,6 +386,31 @@ export async function consumeRateLimit(input: RateLimitInput): Promise<RateLimit
     }
   }
   return consumeInMemory(action, userId, policy, now)
+}
+
+export async function releaseRateLimit(input: RateLimitInput): Promise<void> {
+  const { action, userId, tier } = input
+  if (!userId) {
+    throw new Error('releaseRateLimit: userId is required')
+  }
+  const policy = resolvePolicy(action, tier)
+
+  const useUpstash =
+    typeof process.env.KV_REST_API_URL === 'string' &&
+    process.env.KV_REST_API_URL.length > 0 &&
+    typeof process.env.KV_REST_API_TOKEN === 'string' &&
+    process.env.KV_REST_API_TOKEN.length > 0
+
+  if (useUpstash) {
+    const limiter = await getLimiter(action, tier, policy)
+    // Exact one-token compensation for a prior successful consume in this
+    // request path. Do NOT call resetUsedTokens() here; that clears the whole
+    // key and can over-credit budget.
+    await limiter.limit(buildKey(action, userId), { rate: -1 })
+    return
+  }
+
+  resetInMemory(action, userId, Date.now())
 }
 
 export function rateLimitHeaders(result: RateLimitResult): HeadersInit {

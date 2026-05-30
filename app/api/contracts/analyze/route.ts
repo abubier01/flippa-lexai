@@ -39,7 +39,12 @@ import { CORE_VERSION } from '@/lib/prompt/core'
 import { MODEL_ID, MODEL_PARAMS, MAX_CONTRACT_TOKENS, computeCostMicros } from '@/lib/prompt/model-config'
 import { PersonaSchema } from '@/lib/prompt/persona-types'
 import { loadCurrentPersonaVersion } from '@/lib/persona/repo'
-import { insertRun, updateRunTelemetry, failRun, promoteToCurrent } from '@/lib/analysis/repo'
+import {
+  insertRun,
+  updateRunTelemetry,
+  failRun,
+  promoteToCurrent,
+} from '@/lib/analysis/repo'
 import { callStructured, ModelCallError, SchemaGenerationError } from '@/lib/llm/structured'
 import { verifyGrounding } from '@/lib/grounding'
 
@@ -230,19 +235,36 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- Step 13: insertRun (provenance baseline) -----------------------------
-  const run = await insertRun(service, {
-    contract_id: contractId,
-    user_context: userContext ?? null,
-    persona_id: PERSONA_ID,
-    persona_version_id: personaVersion.id,
-    persona_hash: personaHash,
-    core_version: CORE_VERSION,
-    model_id: MODEL_ID,
-    // Invariant #11: MODEL_PARAMS is the frozen const — no mutation, no spread.
-    model_params: MODEL_PARAMS as unknown as Record<string, unknown>,
-    prompt_hash: promptHash,
-    context_hash: contextHash,
-  })
+  let run: { id: string }
+  try {
+    run = await insertRun(service, {
+      contract_id: contractId,
+      user_context: userContext ?? null,
+      persona_id: PERSONA_ID,
+      persona_version_id: personaVersion.id,
+      persona_hash: personaHash,
+      core_version: CORE_VERSION,
+      model_id: MODEL_ID,
+      model_params: MODEL_PARAMS,
+      prompt_hash: promptHash,
+      context_hash: contextHash,
+    })
+  } catch (err) {
+    if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'conflict') {
+      return NextResponse.json(
+        {
+          status: 'rejected',
+          code: 'ANALYSIS_ALREADY_RUNNING',
+          retry_after_seconds: 3,
+        },
+        {
+          status: 409,
+          headers: { 'Retry-After': '3' },
+        },
+      )
+    }
+    throw err
+  }
 
   // ---- Step 14: callStructured ----------------------------------------------
   const t0 = performance.now()
@@ -381,6 +403,44 @@ export async function POST(req: NextRequest) {
       run_id: run.id,
       contractId,
       err,
+    })
+    return NextResponse.json(
+      { status: 'failed', code: 'PUBLISH_ERROR', analysis_run_id: run.id },
+      { status: 500 },
+    )
+  }
+
+  const { data: promotedContract, error: promotedContractErr } = await service
+    .from('contracts')
+    .select('current_run_id, risk_score')
+    .eq('id', contractId)
+    .single()
+  if (
+    promotedContractErr ||
+    !promotedContract ||
+    promotedContract.current_run_id !== run.id ||
+    promotedContract.risk_score !== parsed.data.risk_score
+  ) {
+    ulog.error('analyze.publish_verify_mismatch', {
+      event: 'analyze.publish_verify_mismatch',
+      run_id: run.id,
+      contractId,
+      expected_risk_score: parsed.data.risk_score,
+      observed_current_run_id: promotedContract?.current_run_id ?? null,
+      observed_risk_score: promotedContract?.risk_score ?? null,
+      err: promotedContractErr,
+    })
+    Sentry.captureMessage('promote_analysis_run_verify_mismatch', {
+      level: 'fatal',
+      tags: { event: 'analyze.publish_verify_mismatch' },
+      extra: {
+        run_id: run.id,
+        contract_id: contractId,
+        expected_risk_score: parsed.data.risk_score,
+        observed_current_run_id: promotedContract?.current_run_id ?? null,
+        observed_risk_score: promotedContract?.risk_score ?? null,
+        error: promotedContractErr ? JSON.stringify(promotedContractErr) : null,
+      },
     })
     return NextResponse.json(
       { status: 'failed', code: 'PUBLISH_ERROR', analysis_run_id: run.id },

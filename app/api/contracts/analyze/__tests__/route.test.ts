@@ -136,6 +136,10 @@ let currentContract: Record<string, unknown> | null = {
   raw_text: CONTRACT_TEXT,
   status: 'pending',
 }
+let currentPromotedContract: Record<string, unknown> | null = {
+  current_run_id: 'run-1',
+  risk_score: 30,
+}
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({
@@ -153,14 +157,33 @@ vi.mock('@/lib/supabase/server', () => ({
 
 vi.mock('@/lib/supabase/service-role-core', () => ({
   getServiceClient: vi.fn(() => ({
-    from: vi.fn(() => ({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn(async () => ({
-        data: { team_id: null, plan: 'solo' },
-        error: null,
-      })),
-    })),
+    from: vi.fn((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn(async () => ({
+            data: { team_id: null, plan: 'solo' },
+            error: null,
+          })),
+        }
+      }
+      if (table === 'contracts') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          single: vi.fn(async () => ({
+            data: currentPromotedContract,
+            error: currentPromotedContract ? null : { message: 'not found' },
+          })),
+        }
+      }
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+      }
+    }),
   })),
 }))
 
@@ -239,6 +262,10 @@ beforeEach(() => {
     user_id: 'user-1',
     raw_text: CONTRACT_TEXT,
     status: 'pending',
+  }
+  currentPromotedContract = {
+    current_run_id: 'run-1',
+    risk_score: 30,
   }
   loadPersonaMock.mockResolvedValue({
     id: 'pv-1',
@@ -375,6 +402,24 @@ describe('spec test #10 — failure paths', () => {
       'run-1',
       expect.objectContaining({ code: 'MODEL_ERROR' }),
     )
+  })
+
+  it('10d: insertRun conflict → 409 ANALYSIS_ALREADY_RUNNING', async () => {
+    insertRunMock.mockRejectedValueOnce({ code: 'conflict' })
+    const res = await POST(buildRequest())
+    const body = await res.json()
+    expect(res.status).toBe(409)
+    expect(res.headers.get('Retry-After')).toBe('3')
+    expect(body.code).toBe('ANALYSIS_ALREADY_RUNNING')
+    expect(callStructuredMock).not.toHaveBeenCalled()
+  })
+
+  it('10e: post-promote verification mismatch → 500 PUBLISH_ERROR', async () => {
+    currentPromotedContract = { current_run_id: 'someone-else', risk_score: 99 }
+    const res = await POST(buildRequest())
+    const body = await res.json()
+    expect(res.status).toBe(500)
+    expect(body.code).toBe('PUBLISH_ERROR')
   })
 
   it('10c: callStructured throws SchemaGenerationError → 422 OUTPUT_SCHEMA_FAIL (codex MAJOR fix #4)', async () => {

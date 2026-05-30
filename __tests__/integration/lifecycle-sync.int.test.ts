@@ -141,4 +141,60 @@ describe('contract lifecycle sync (codex CRITICAL fix #2)', () => {
       await cleanupContract(contractId)
     }
   })
+
+  it('parallel promote_analysis_run calls keep exactly one current row + synced pointer', async () => {
+    const contractId = await seedContract()
+    try {
+      const svc = makeServiceRoleClient()
+      const runA = await insertRun(svc, {
+        contract_id: contractId,
+        user_context: null,
+        persona_id: 'procurement',
+        persona_version_id: personaVersionId,
+        persona_hash: 'h',
+        core_version: 'v1',
+        model_id: 'm',
+        model_params: {},
+        prompt_hash: 'p-a',
+        context_hash: null,
+      })
+      await svc.from('analysis_runs').update({ status: 'completed' }).eq('id', runA.id)
+
+      const runB = await insertRun(svc, {
+        contract_id: contractId,
+        user_context: null,
+        persona_id: 'procurement',
+        persona_version_id: personaVersionId,
+        persona_hash: 'h',
+        core_version: 'v1',
+        model_id: 'm',
+        model_params: {},
+        prompt_hash: 'p-b',
+        context_hash: null,
+      })
+      await svc.from('analysis_runs').update({ status: 'completed' }).eq('id', runB.id)
+
+      await Promise.all([
+        promoteToCurrent(svc, runA.id, { risk_score: 41 } as unknown as AnalysisOutput),
+        promoteToCurrent(svc, runB.id, { risk_score: 82 } as unknown as AnalysisOutput),
+      ])
+
+      const { data: currentRows } = await svc
+        .from('analysis_runs')
+        .select('id')
+        .eq('contract_id', contractId)
+        .eq('is_current', true)
+      expect((currentRows ?? []).length).toBe(1)
+      const currentId = currentRows?.[0]?.id as string
+
+      const { data: contract } = await svc
+        .from('contracts')
+        .select('current_run_id')
+        .eq('id', contractId)
+        .single()
+      expect(contract?.current_run_id).toBe(currentId)
+    } finally {
+      await cleanupContract(contractId)
+    }
+  })
 })

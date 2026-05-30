@@ -29,7 +29,11 @@ export function bandForScore(score: number): ScoreBand {
     if (score >= band.min && score <= band.max) return band
   }
   // Defensive: schema guarantees 0-100 ints, but clamp anyway.
-  if (score < 0) return SCORE_BANDS[0]
+  if (score < 0) {
+    console.warn('bandForScore_clamped', { score, target: SCORE_BANDS[0].label })
+    return SCORE_BANDS[0]
+  }
+  console.warn('bandForScore_clamped', { score, target: SCORE_BANDS[SCORE_BANDS.length - 1].label })
   return SCORE_BANDS[SCORE_BANDS.length - 1]
 }
 

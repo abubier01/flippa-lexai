@@ -37,6 +37,7 @@ export default function UserContextEcho({ userContext }: Props) {
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
+          {/* Keep as plain-text <pre>; React escapes string children by default. */}
           <pre className="px-6 pb-4 pt-1 font-mono text-xs whitespace-pre-wrap text-foreground">
             {userContext}
           </pre>

@@ -25,7 +25,10 @@ DROP POLICY IF EXISTS analysis_runs_select           ON analysis_runs;
 -- Remove the read pointer next so analysis_runs can drop cleanly.
 ALTER TABLE contracts DROP COLUMN IF EXISTS current_run_id;
 
+ALTER TABLE analysis_runs
+  DROP CONSTRAINT IF EXISTS analysis_runs_output_diagnostics_shape;
 DROP INDEX IF EXISTS analysis_runs_one_current_per_contract;
+DROP INDEX IF EXISTS analysis_runs_one_running_per_contract;
 DROP TABLE IF EXISTS analysis_runs;
 
 -- personas ↔ persona_versions circular FK — break it before dropping tables.
@@ -37,6 +40,24 @@ DROP TABLE IF EXISTS personas;
 
 -- Remove the admin flag column added at the head of the up migration.
 ALTER TABLE public.profiles DROP COLUMN IF EXISTS is_platform_admin;
+
+-- Restore the 005-era profile guard shape (no is_platform_admin column).
+CREATE OR REPLACE FUNCTION public.guard_profile_billing_columns()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF current_user IN ('service_role', 'postgres', 'supabase_admin', 'supabase_auth_admin') THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.plan IS DISTINCT FROM OLD.plan THEN
+    RAISE EXCEPTION 'profiles.plan is not user-writable';
+  END IF;
+  IF NEW.stripe_customer_id IS DISTINCT FROM OLD.stripe_customer_id THEN
+    RAISE EXCEPTION 'profiles.stripe_customer_id is not user-writable';
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Recreate empty contract_analyses shell (columns from scripts/001_create_schema.sql).

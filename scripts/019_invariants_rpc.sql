@@ -11,6 +11,7 @@
 --   1. pointer_not_current — contracts.current_run_id → run with is_current=false
 --   2. pointer_missing_or_mismatch — is_current run exists, pointer disagrees
 --   3. multiple_current — > 1 is_current=true rows per contract
+--   4. pointer_null_with_current — is_current run exists but pointer is NULL
 
 \set ON_ERROR_STOP on
 
@@ -44,7 +45,19 @@ AS $$
 
   UNION ALL
 
-  -- (3) More than one current run per contract.
+  -- (3) is_current run exists but pointer is NULL.
+  SELECT 'pointer_null_with_current'::text AS kind,
+         c.id                               AS contract_id,
+         ar.id                              AS run_id
+    FROM contracts c
+    JOIN analysis_runs ar
+      ON ar.contract_id = c.id
+     AND ar.is_current  = true
+   WHERE c.current_run_id IS NULL
+
+  UNION ALL
+
+  -- (4) More than one current run per contract.
   SELECT 'multiple_current'::text AS kind,
          ar.contract_id           AS contract_id,
          NULL::uuid               AS run_id

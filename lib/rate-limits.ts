@@ -29,6 +29,7 @@ import 'server-only'
 import {
   consumeRateLimit,
   peekRateLimit,
+  releaseRateLimit,
   type RateLimitResult,
 } from './security/rate-limit'
 import type { PlanType } from './plan-limits'
@@ -53,6 +54,10 @@ function failure(scope: RateLimitScope, r: RateLimitResult): RateLimitCheckResul
     scope,
     retryAfterSeconds: Math.max(1, r.retryAfterSeconds),
   }
+}
+
+function commitUncertain(r: RateLimitResult): boolean {
+  return r.allowed && r.committed !== true
 }
 
 // Identity shapes the three scopes use. Synthetic prefixes give each scope
@@ -88,18 +93,51 @@ export async function checkRateLimit(
   // We still commit sequentially because Upstash's @upstash/ratelimit doesn't
   // expose a multi-scope atomic primitive. Race window is bounded by the time
   // between this point and the third `await` below (sub-ms typical).
-  const user = await consumeRateLimit({ action: 'analyze:perUser', userId: ids.user, tier })
-  if (!user.allowed) return failure('user', user)
-
-  const tenant = await consumeRateLimit({ action: 'analyze:perTenant', userId: ids.tenant, tier })
-  if (!tenant.allowed) return failure('tenant', tenant)
-
-  const daily = await consumeRateLimit({
-    action: 'analyze:perTenantDaily',
+  const userInput = { action: 'analyze:perUser' as const, userId: ids.user, tier }
+  const tenantInput = { action: 'analyze:perTenant' as const, userId: ids.tenant, tier }
+  const dailyInput = {
+    action: 'analyze:perTenantDaily' as const,
     userId: ids.tenant_daily,
     tier,
-  })
-  if (!daily.allowed) return failure('tenant_daily', daily)
+  }
+
+  const user = await consumeRateLimit(userInput)
+  if (!user.allowed) return failure('user', user)
+  if (commitUncertain(user)) return failure('user', user)
+
+  const tenant = await consumeRateLimit(tenantInput)
+  if (!tenant.allowed) {
+    if (user.committed === true) {
+      await releaseRateLimit(userInput)
+    }
+    return failure('tenant', tenant)
+  }
+  if (commitUncertain(tenant)) {
+    if (user.committed === true) {
+      await releaseRateLimit(userInput)
+    }
+    return failure('tenant', tenant)
+  }
+
+  const daily = await consumeRateLimit(dailyInput)
+  if (!daily.allowed) {
+    if (tenant.committed === true) {
+      await releaseRateLimit(tenantInput)
+    }
+    if (user.committed === true) {
+      await releaseRateLimit(userInput)
+    }
+    return failure('tenant_daily', daily)
+  }
+  if (commitUncertain(daily)) {
+    if (tenant.committed === true) {
+      await releaseRateLimit(tenantInput)
+    }
+    if (user.committed === true) {
+      await releaseRateLimit(userInput)
+    }
+    return failure('tenant_daily', daily)
+  }
 
   return { allowed: true }
 }

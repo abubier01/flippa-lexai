@@ -30,7 +30,7 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminContext | Nex
     .eq('id', user.id)
     .maybeSingle()
 
-  if (profileErr || !profile?.is_platform_admin) {
+  if (profileErr || profile?.is_platform_admin !== true) {
     return NextResponse.json({ error: 'admin_required' }, { status: 403 })
   }
 

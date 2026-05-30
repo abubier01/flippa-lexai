@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getUserMock: vi.fn(),
   maybeSingleMock: vi.fn(),
+  fromMock: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -22,25 +23,21 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({
     auth: { getUser: mocks.getUserMock },
+    from: mocks.fromMock,
   })),
 }))
 
-vi.mock('@/lib/supabase/service-role-core', () => ({
-  getServiceClient: vi.fn(() => ({
-    from: () => ({
-      select: () => ({
-        eq: () => ({ maybeSingle: mocks.maybeSingleMock }),
-      }),
-    }),
-  })),
-}))
-
-const { getUserMock, maybeSingleMock } = mocks
+const { getUserMock, maybeSingleMock, fromMock } = mocks
 
 import { requirePlatformAdminPage } from '../page-guard'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  fromMock.mockReturnValue({
+    select: () => ({
+      eq: () => ({ maybeSingle: maybeSingleMock }),
+    }),
+  })
 })
 
 describe('requirePlatformAdminPage', () => {

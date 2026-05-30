@@ -152,7 +152,10 @@ export default function ContractAnalysisView({
       </div>
 
       {/* ─── Latest-failed banner (Empty-state matrix row 2) ─────── */}
-      {latestFailedRun && run && latestFailedRun.id !== run.id && (
+      {latestFailedRun &&
+        latestFailedRun.status === 'failed' &&
+        run &&
+        new Date(latestFailedRun.created_at).getTime() > new Date(run.created_at).getTime() && (
         <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-5 py-3 text-sm">
           Latest analysis failed.{' '}
           <span className="font-medium">

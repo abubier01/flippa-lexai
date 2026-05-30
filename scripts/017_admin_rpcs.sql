@@ -44,6 +44,12 @@ BEGIN
     RAISE EXCEPTION 'analysis_run % not found', p_run_id USING ERRCODE = 'P0002';
   END IF;
 
+  -- Serialize promotes per-contract to avoid pointer/update races under
+  -- concurrent publish attempts.
+  PERFORM pg_advisory_xact_lock(
+    ('x' || substr(replace(v_contract_id::text, '-', ''), 1, 16))::bit(64)::bigint
+  );
+
   -- (1) Demote the prior current run (if any) for the same contract.
   UPDATE analysis_runs
      SET is_current = false
@@ -98,6 +104,8 @@ DECLARE
   v_draft_id uuid;
   v_next_version int;
 BEGIN
+  SET LOCAL lock_timeout = '5s';
+
   -- Lock the draft row to serialize concurrent publish calls for the same persona.
   SELECT id INTO v_draft_id
     FROM persona_versions

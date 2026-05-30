@@ -30,7 +30,7 @@ export interface InsertRunInput {
   persona_hash: string
   core_version: string
   model_id: string
-  model_params: Record<string, unknown>
+  model_params: Readonly<Record<string, unknown>>
   prompt_hash: string
   context_hash: string | null
 }
@@ -43,7 +43,11 @@ export interface Telemetry {
 }
 
 export class AnalysisRepoError extends Error {
-  constructor(public code: 'not_found' | 'db_error', message: string, public detail?: unknown) {
+  constructor(
+    public code: 'not_found' | 'db_error' | 'conflict',
+    message: string,
+    public detail?: unknown,
+  ) {
     super(message)
     this.name = 'AnalysisRepoError'
   }
@@ -63,7 +67,12 @@ export async function insertRun(
     })
     .select('id')
     .single()
-  if (error || !data) throw new AnalysisRepoError('db_error', error?.message ?? 'insert failed', error)
+  if (error || !data) {
+    if ((error as { code?: string } | null)?.code === '23505') {
+      throw new AnalysisRepoError('conflict', 'analysis already running for contract', error)
+    }
+    throw new AnalysisRepoError('db_error', error?.message ?? 'insert failed', error)
+  }
   return { id: data.id as string }
 }
 

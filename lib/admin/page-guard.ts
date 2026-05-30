@@ -7,7 +7,6 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getServiceClient } from '@/lib/supabase/service-role-core'
 
 export interface PlatformAdminPageContext {
   userId: string
@@ -24,11 +23,7 @@ export async function requirePlatformAdminPage(
     redirect(`/auth/login?next=${encodeURIComponent(loginNext)}`)
   }
 
-  // Use the service role here for parity with the API guard's intent (the
-  // user's own profile row IS readable under RLS, but going through service
-  // role avoids RLS round-trips and matches the lib/persona/repo conventions).
-  const svc = getServiceClient()
-  const { data, error } = await svc
+  const { data, error } = await supabase
     .from('profiles')
     .select('is_platform_admin')
     .eq('id', user.id)

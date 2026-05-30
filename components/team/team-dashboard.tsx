@@ -40,11 +40,9 @@ export default function TeamDashboard({
 
   const isOwner = team ? members.find(m => m.user_id === currentUserId)?.role === 'owner' : false
 
-  // Effective risk score sourced from analysis_runs.output.risk_score
-  // (the integer 0-100 emitted by the prompt compiler). Falls back to the
-  // contracts.risk_score column for rows without a current run.
+  // Effective risk score is sourced only from analysis_runs.output.risk_score.
   function effectiveScore(c: SharedContract) {
-    return c.run?.output?.risk_score ?? c.risk_score ?? 0
+    return c.run?.output?.risk_score ?? 0
   }
 
   async function createTeam() {

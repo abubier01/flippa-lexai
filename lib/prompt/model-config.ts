@@ -10,7 +10,7 @@ export const MODEL_PARAMS = Object.freeze({
   top_p: 1,
   max_tokens: 4096,
   // seed omitted — Groq does not honor it as of pin date.
-} as const);
+} as const) satisfies Readonly<Record<string, number>>;
 
 // 128k context window on llama-3.3-70b-versatile; leave headroom for output
 // (max_tokens above) + prompt scaffolding (~4k) + safety margin.
@@ -20,16 +20,24 @@ export const MAX_CONTRACT_TOKENS = 100_000;
 // Persisted into analysis_runs.cost_usd_micros at request time; do NOT recompute
 // later if pricing changes — historical rows stay accurate.
 export const UNIT_COSTS_USD_PER_MTOK = Object.freeze({
-  input: 0.59,
-  output: 0.79,
+  inputMicrosNumerator: 59n,
+  outputMicrosNumerator: 79n,
+  denominator: 100n,
 } as const);
 
 export function computeCostMicros(usage: {
   input_tokens: number;
   output_tokens: number;
 }): number {
-  // micros = USD * 1_000_000; cost = (tokens / 1_000_000) * USD-per-Mtok
-  const inputMicros = usage.input_tokens * UNIT_COSTS_USD_PER_MTOK.input;
-  const outputMicros = usage.output_tokens * UNIT_COSTS_USD_PER_MTOK.output;
-  return Math.round(inputMicros + outputMicros);
+  const denom = UNIT_COSTS_USD_PER_MTOK.denominator;
+  const half = denom / 2n;
+
+  const inputScaled = BigInt(usage.input_tokens) * UNIT_COSTS_USD_PER_MTOK.inputMicrosNumerator;
+  const outputScaled = BigInt(usage.output_tokens) * UNIT_COSTS_USD_PER_MTOK.outputMicrosNumerator;
+  const totalMicros = (inputScaled + outputScaled + half) / denom;
+
+  if (totalMicros > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error('cost_usd_micros exceeds JS safe integer range');
+  }
+  return Number(totalMicros);
 }

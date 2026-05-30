@@ -14,6 +14,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import * as Sentry from '@sentry/nextjs'
 import { Button } from '@/components/ui/button'
 
 const USER_CONTEXT_MAX = 4000
@@ -32,6 +33,7 @@ const REJECTION_MESSAGES: Record<string, string> = {
   EMPTY_AFTER_SCRUB: 'Context was empty after sanitization.',
   SENTINEL_VIOLATION: 'Context contains disallowed control sequences.',
   PERSONA_INVALID: 'Analysis configuration is invalid. The team has been notified.',
+  ANALYSIS_ALREADY_RUNNING: 'Analysis is already running for this contract. Please wait a moment.',
 }
 
 const FAILURE_MESSAGES: Record<string, string> = {
@@ -88,6 +90,13 @@ export default function AnalyzeButton({ contractId, analysisEnabled, hasCurrentR
         } else if ((data as { status?: string }).status === 'unavailable') {
           toast.error('Analysis is temporarily unavailable.')
         } else {
+          if (code) {
+            Sentry.captureMessage('analyze_unmapped_error_code', {
+              level: 'warning',
+              tags: { event: 'analyze_unmapped_error_code' },
+              extra: { code },
+            })
+          }
           toast.error('Analysis failed. Please try again.')
         }
         return
