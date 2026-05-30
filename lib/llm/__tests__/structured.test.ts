@@ -14,19 +14,32 @@ const createGroqMock = vi.hoisted(() =>
   vi.fn(() => (id: string) => ({ __groqModel: id })),
 )
 
-vi.mock('ai', () => ({
-  generateObject: generateObjectMock,
-  jsonSchema: jsonSchemaMock,
-  NoObjectGeneratedError: class NoObjectGeneratedError extends Error {
+vi.mock('ai', () => {
+  class NoObjectGeneratedError extends Error {
     usage?: unknown
-  },
-}))
+    cause?: unknown
+    static isInstance(e: unknown): boolean {
+      return e instanceof NoObjectGeneratedError
+    }
+  }
+  return {
+    generateObject: generateObjectMock,
+    jsonSchema: jsonSchemaMock,
+    NoObjectGeneratedError,
+  }
+})
 
 vi.mock('@ai-sdk/groq', () => ({
   createGroq: createGroqMock,
 }))
 
-import { callStructured, computeCostMicros, ModelCallError } from '../structured'
+import {
+  callStructured,
+  computeCostMicros,
+  ModelCallError,
+  SchemaGenerationError,
+} from '../structured'
+import { NoObjectGeneratedError } from 'ai'
 import { MODEL_ID } from '@/lib/prompt/model-config'
 
 const sampleJsonSchema = {
@@ -100,7 +113,7 @@ describe('callStructured — invariant #13 enum wiring', () => {
     expect(res.usage).toEqual({ input_tokens: 42, output_tokens: 7 })
   })
 
-  it('throws ModelCallError when generateObject rejects', async () => {
+  it('throws ModelCallError when generateObject rejects with a plain provider error', async () => {
     generateObjectMock.mockRejectedValue(new Error('boom'))
     await expect(
       callStructured({
@@ -109,6 +122,38 @@ describe('callStructured — invariant #13 enum wiring', () => {
         modelParams: { temperature: 0, top_p: 1, max_tokens: 100 },
       }),
     ).rejects.toBeInstanceOf(ModelCallError)
+  })
+
+  it('throws SchemaGenerationError (not ModelCallError) when AI SDK raises NoObjectGeneratedError (codex MAJOR fix #4)', async () => {
+    const cause = new Error('zod parse failed')
+    // Constructor is mocked above as `(message: string)`; cast to bypass the
+    // real AI SDK type which requires more fields.
+    const ErrCtor = NoObjectGeneratedError as unknown as new (m: string) => Error & {
+      usage?: unknown
+      cause?: unknown
+    }
+    const err = new ErrCtor('schema validation failed')
+    err.cause = cause
+    err.usage = { inputTokens: 100, outputTokens: 50 }
+    generateObjectMock.mockRejectedValue(err)
+
+    const promise = callStructured({
+      prompt: 'p',
+      jsonSchema: sampleJsonSchema,
+      modelParams: { temperature: 0, top_p: 1, max_tokens: 100 },
+    })
+    await expect(promise).rejects.toBeInstanceOf(SchemaGenerationError)
+    // It must NOT be a ModelCallError — that's the whole point of the split.
+    await expect(promise).rejects.not.toBeInstanceOf(ModelCallError)
+    // Partial usage surfaced for telemetry.
+    try {
+      await promise
+    } catch (e) {
+      expect((e as SchemaGenerationError).partialUsage).toEqual({
+        input_tokens: 100,
+        output_tokens: 50,
+      })
+    }
   })
 
   it('throws ModelCallError when GROQ_API_KEY is missing', async () => {

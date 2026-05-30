@@ -40,7 +40,7 @@ import { MODEL_ID, MODEL_PARAMS, MAX_CONTRACT_TOKENS, computeCostMicros } from '
 import { PersonaSchema } from '@/lib/prompt/persona-types'
 import { loadCurrentPersonaVersion } from '@/lib/persona/repo'
 import { insertRun, updateRunTelemetry, failRun, promoteToCurrent } from '@/lib/analysis/repo'
-import { callStructured, ModelCallError } from '@/lib/llm/structured'
+import { callStructured, ModelCallError, SchemaGenerationError } from '@/lib/llm/structured'
 import { verifyGrounding } from '@/lib/grounding'
 
 const PERSONA_ID = 'procurement'
@@ -249,6 +249,7 @@ export async function POST(req: NextRequest) {
   let modelOutput: unknown
   let usage: { input_tokens: number; output_tokens: number } | undefined
   let modelError: ModelCallError | null = null
+  let schemaGenError: SchemaGenerationError | null = null
   try {
     const result = await callStructured({
       prompt,
@@ -258,9 +259,11 @@ export async function POST(req: NextRequest) {
     modelOutput = result.output
     usage = result.usage
   } catch (err) {
-    if (err instanceof ModelCallError) {
-      modelError = err
+    if (err instanceof SchemaGenerationError) {
+      schemaGenError = err
       usage = err.partialUsage
+    } else if (err instanceof ModelCallError) {
+      modelError = err
     } else {
       throw err
     }
@@ -293,6 +296,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { status: 'failed', code: 'PUBLISH_ERROR', analysis_run_id: run.id },
       { status: 500 },
+    )
+  }
+
+  // ---- Step 16a: SchemaGenerationError → OUTPUT_SCHEMA_FAIL (422) -----------
+  // The AI SDK could not parse/validate the model's text against the schema.
+  // This is NOT a provider failure — route to the schema/prompt on-call, not
+  // the model on-call (codex MAJOR fix #4).
+  if (schemaGenError) {
+    await failRun(service, run.id, {
+      code: 'OUTPUT_SCHEMA_FAIL',
+      detail: schemaGenError.message,
+    })
+    ulog.error('analyze.schema_generation_error', {
+      event: 'analyze.schema_generation_error',
+      run_id: run.id,
+      contractId,
+      err: schemaGenError,
+    })
+    return NextResponse.json(
+      { status: 'failed', code: 'OUTPUT_SCHEMA_FAIL', analysis_run_id: run.id },
+      { status: 422 },
     )
   }
 

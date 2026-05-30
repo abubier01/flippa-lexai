@@ -27,6 +27,7 @@ const {
   loadPersonaMock,
   checkRateLimitMock,
   ModelCallErrorCls,
+  SchemaGenerationErrorCls,
   CONTRACT_TEXT,
   PERSONA_CONTENT,
   PERSONA_HASH,
@@ -54,6 +55,15 @@ const {
     ) {
       super(cause instanceof Error ? cause.message : String(cause))
       this.name = 'ModelCallError'
+    }
+  }
+  class SchemaGenerationErrorCls extends Error {
+    constructor(
+      public cause: unknown,
+      public partialUsage?: { input_tokens: number; output_tokens: number },
+    ) {
+      super(cause instanceof Error ? cause.message : String(cause))
+      this.name = 'SchemaGenerationError'
     }
   }
 
@@ -85,6 +95,7 @@ const {
     loadPersonaMock,
     checkRateLimitMock,
     ModelCallErrorCls,
+    SchemaGenerationErrorCls,
     CONTRACT_TEXT,
     PERSONA_CONTENT,
     PERSONA_HASH,
@@ -96,6 +107,7 @@ const {
 vi.mock('@/lib/llm/structured', () => ({
   callStructured: callStructuredMock,
   ModelCallError: ModelCallErrorCls,
+  SchemaGenerationError: SchemaGenerationErrorCls,
   computeCostMicros: (u: { input_tokens: number; output_tokens: number }) =>
     Math.round(u.input_tokens * 0.59 + u.output_tokens * 0.79),
 }))
@@ -362,6 +374,30 @@ describe('spec test #10 — failure paths', () => {
       expect.anything(),
       'run-1',
       expect.objectContaining({ code: 'MODEL_ERROR' }),
+    )
+  })
+
+  it('10c: callStructured throws SchemaGenerationError → 422 OUTPUT_SCHEMA_FAIL (codex MAJOR fix #4)', async () => {
+    callStructuredMock.mockRejectedValueOnce(
+      new SchemaGenerationErrorCls(new Error('no object generated'), {
+        input_tokens: 100,
+        output_tokens: 50,
+      }),
+    )
+    const res = await POST(buildRequest())
+    const body = await res.json()
+    expect(res.status).toBe(422)
+    expect(body.code).toBe('OUTPUT_SCHEMA_FAIL')
+    expect(failRunMock).toHaveBeenCalledWith(
+      expect.anything(),
+      'run-1',
+      expect.objectContaining({ code: 'OUTPUT_SCHEMA_FAIL' }),
+    )
+    // Partial usage must still be persisted via updateRunTelemetry.
+    expect(updateTelemetryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      'run-1',
+      expect.objectContaining({ input_tokens: 100, output_tokens: 50 }),
     )
   })
 })

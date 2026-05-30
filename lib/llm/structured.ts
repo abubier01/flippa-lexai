@@ -54,6 +54,23 @@ export class ModelCallError extends Error {
   }
 }
 
+/**
+ * Raised when the AI SDK throws NoObjectGeneratedError — the model returned
+ * text but it could not be parsed or validated against the persona-derived
+ * JSON schema (codex MAJOR fix #4). Distinct from ModelCallError so the route
+ * can map this to OUTPUT_SCHEMA_FAIL (422) instead of MODEL_ERROR (502) and
+ * telemetry routes to the prompt/schema on-call instead of the provider on-call.
+ */
+export class SchemaGenerationError extends Error {
+  constructor(
+    public cause: unknown,
+    public partialUsage?: StructuredCallUsage,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.name = 'SchemaGenerationError'
+  }
+}
+
 export async function callStructured(
   input: StructuredCallInput,
 ): Promise<StructuredCallResult> {
@@ -81,14 +98,17 @@ export async function callStructured(
     const usage = extractUsage(result.usage)
     return { output: result.object, usage }
   } catch (err) {
-    // generateObject throws NoObjectGeneratedError with .usage attached when the
-    // model produced text but it could not be coerced into the schema. Surface
-    // the partial usage so the route can persist telemetry even on failure.
-    let partial: StructuredCallUsage | undefined
-    if (err instanceof NoObjectGeneratedError && err.usage) {
-      partial = extractUsage(err.usage)
+    // generateObject throws NoObjectGeneratedError when the model produced
+    // text but the AI SDK could not parse/validate it into the schema —
+    // that's a schema-generation failure, NOT a provider failure. Surface as
+    // a distinct error class so the route maps to OUTPUT_SCHEMA_FAIL (422),
+    // not MODEL_ERROR (502). Provider/transport/HTTP errors keep their
+    // existing ModelCallError mapping.
+    if (NoObjectGeneratedError.isInstance(err)) {
+      const partial = err.usage ? extractUsage(err.usage) : undefined
+      throw new SchemaGenerationError(err, partial)
     }
-    throw new ModelCallError(err, partial)
+    throw new ModelCallError(err)
   }
 }
 
