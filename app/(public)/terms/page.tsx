@@ -30,15 +30,15 @@ You must be at least 18 years old to use the Service. By registering, you repres
   },
   {
     title: '4. Subscription plans and billing',
-    content: `LexAI offers Free, Pro, and Team subscription tiers. Paid plans are billed in advance on a monthly basis.
+    content: `LexAI offers Solo, Pro, and Team subscription tiers. All plans are paid and billed in advance on a monthly basis.
 
-**Free plan.** Includes 5 contract analyses per month and 20 AI chat messages per contract at no charge.
+**Solo plan.** Entry tier for individual users with a monthly cap on contract analyses and AI chat messages per contract.
 
-**Pro plan.** Includes unlimited analyses, unlimited AI chat, clause extraction, and PDF export at $29/month.
+**Pro plan.** Includes unlimited analyses, unlimited AI chat, clause extraction, and PDF export.
 
-**Team plan.** Includes all Pro features plus shared team library, team analytics, and up to 10 members at $99/month.
+**Team plan.** Includes all Pro features plus shared team library, team analytics, and up to 10 members.
 
-All fees are non-refundable except where required by law. We reserve the right to change pricing with 30 days notice.`,
+All fees are non-refundable except where required by law. Current pricing is shown on the in-product upgrade page. We reserve the right to change pricing with 30 days notice.`,
   },
   {
     title: '5. Acceptable use',

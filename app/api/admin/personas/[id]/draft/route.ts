@@ -13,6 +13,7 @@ import {
   deleteDraft,
   PersonaRepoError,
 } from '@/lib/persona/repo'
+import type { Persona } from '@/lib/prompt/persona-types'
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requirePlatformAdmin()
@@ -61,7 +62,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
 
   try {
-    const draft = await updateDraft(getServiceClient(), id, patch as Record<string, never>, auth.userId)
+    const draft = await updateDraft(getServiceClient(), id, patch as Partial<Persona>, auth.userId)
     return NextResponse.json({ draft })
   } catch (err) {
     if (err instanceof PersonaRepoError) {

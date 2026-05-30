@@ -269,7 +269,7 @@ export default function ContactClient() {
                 {[
                   { plan: 'Team plan', time: '< 2 hours', color: 'text-green-600 bg-green-50' },
                   { plan: 'Pro plan', time: '< 8 hours', color: 'text-blue-600 bg-blue-50' },
-                  { plan: 'Free plan', time: '< 24 hours', color: 'text-muted-foreground bg-muted' },
+                  { plan: 'Solo plan', time: '< 24 hours', color: 'text-muted-foreground bg-muted' },
                 ].map(row => (
                   <div key={row.plan} className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">{row.plan}</span>

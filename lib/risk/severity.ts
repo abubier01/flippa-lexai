@@ -6,6 +6,8 @@
 //
 // Spec § Severity and Risk Rubric (Canonical) + § Part 4 (band card colors).
 
+import { log } from '@/lib/log'
+
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
 
 export type BandColor = 'green' | 'yellow' | 'orange' | 'red'
@@ -30,10 +32,10 @@ export function bandForScore(score: number): ScoreBand {
   }
   // Defensive: schema guarantees 0-100 ints, but clamp anyway.
   if (score < 0) {
-    console.warn('bandForScore_clamped', { score, target: SCORE_BANDS[0].label })
+    log.warn('bandForScore_clamped', { score, target: SCORE_BANDS[0].label })
     return SCORE_BANDS[0]
   }
-  console.warn('bandForScore_clamped', { score, target: SCORE_BANDS[SCORE_BANDS.length - 1].label })
+  log.warn('bandForScore_clamped', { score, target: SCORE_BANDS[SCORE_BANDS.length - 1].label })
   return SCORE_BANDS[SCORE_BANDS.length - 1]
 }
 

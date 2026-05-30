@@ -1,10 +1,16 @@
 'use client'
 
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { ArrowLeft, Check, Shield, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import StripeEmbeddedCheckout from '@/components/stripe/embedded-checkout'
 import type { Product } from '@/lib/products'
+
+// Code-split the Stripe SDK out of the initial upgrade-page bundle (~80-100KB gz).
+const StripeEmbeddedCheckout = dynamic(
+  () => import('@/components/stripe/embedded-checkout'),
+  { ssr: false },
+)
 
 const PRO_FEATURES = [
   'Unlimited contract analyses',

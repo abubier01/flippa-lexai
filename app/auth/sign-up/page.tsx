@@ -12,9 +12,9 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
 const perks = [
-  '5 free contract analyses every month',
   'AI-powered risk detection',
   'Plain-English summaries',
+  'Clause extraction & PDF export',
   'Secure & private by default',
 ]
 
@@ -90,7 +90,7 @@ export default function SignUpPage() {
 
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-foreground mb-1">Create your account</h1>
-            <p className="text-muted-foreground text-sm">Free plan — no credit card required</p>
+            <p className="text-muted-foreground text-sm">Choose a plan after signup — Solo, Team, or Pro.</p>
           </div>
 
           <form onSubmit={handleSignUp} className="flex flex-col gap-5">
@@ -135,7 +135,7 @@ export default function SignUpPage() {
             </div>
 
             <Button type="submit" className="w-full h-10" disabled={loading}>
-              {loading ? 'Creating account…' : 'Create free account'}
+              {loading ? 'Creating account…' : 'Create account'}
             </Button>
           </form>
 

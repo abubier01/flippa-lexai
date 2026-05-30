@@ -22,12 +22,14 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
     supabase.from('contracts').select('*').eq('id', id).single(),
     hasTeamAccess(user.id),
     // Drop empty assistant placeholders (orphaned from failed/aborted streams).
+    // Cap to the most recent 100 turns — long threads would otherwise balloon SSR payload.
     supabase
       .from('chat_messages')
       .select('*')
       .eq('contract_id', id)
       .or('role.eq.user,content.neq.')
-      .order('created_at', { ascending: true }),
+      .order('created_at', { ascending: false })
+      .limit(100),
   ])
 
   if (!contractRes.data) notFound()
@@ -83,7 +85,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
       run={runWithPersona?.run ?? null}
       persona={runWithPersona?.persona ?? null}
       latestFailedRun={latestFailedRun}
-      initialMessages={messagesRes.data || []}
+      initialMessages={(messagesRes.data || []).slice().reverse()}
       userPlan={profileRes.data?.plan ?? 'solo'}
       userTeamId={access.ok ? access.teamId : null}
       isTeamViewer={!isOwner && isTeamMember}
